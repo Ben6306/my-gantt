@@ -15,6 +15,7 @@
           <button type="button" data-mode="Month">월</button>
         </div>
         <button type="button" id="today-btn" class="btn-ghost">오늘</button>
+        <button type="button" id="add-btn" class="btn-primary">+ 태스크 추가</button>
       </div>
     </header>
 
@@ -32,6 +33,47 @@
         <div id="gantt"></div>
       </section>
     </main>
+
+    <dialog id="task-modal" class="modal">
+      <form id="task-form" method="dialog" novalidate>
+        <h2 id="modal-title">태스크 추가</h2>
+
+        <label class="field">
+          <span>이름</span>
+          <input name="name" type="text" required maxlength="60" autocomplete="off" />
+        </label>
+
+        <div class="field-row">
+          <label class="field">
+            <span>시작일</span>
+            <input name="start" type="date" required />
+          </label>
+          <label class="field">
+            <span>종료일</span>
+            <input name="end" type="date" required />
+          </label>
+        </div>
+
+        <label class="field">
+          <span>진행률 <output id="progress-output">0%</output></span>
+          <input name="progress" type="range" min="0" max="100" step="5" value="0" />
+        </label>
+
+        <fieldset class="field">
+          <legend>선행 태스크</legend>
+          <div id="dependency-options" class="dependency-options"></div>
+        </fieldset>
+
+        <p id="form-error" class="form-error" role="alert"></p>
+
+        <div class="modal-actions">
+          <button type="button" id="delete-btn" class="btn-danger">삭제</button>
+          <span class="spacer"></span>
+          <button type="button" id="cancel-btn" class="btn-ghost">취소</button>
+          <button type="submit" class="btn-primary">저장</button>
+        </div>
+      </form>
+    </dialog>
 
     <script type="module" src="/src/main.js"></script>
   </body>

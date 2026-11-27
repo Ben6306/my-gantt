@@ -10,6 +10,8 @@
   --text-muted: #6b7385;
   --accent: #2f6fed;
   --accent-soft: #dce7fd;
+  --danger: #d92d20;
+  --danger-soft: #fdecea;
 
   /* frappe-gantt 행 높이(bar_height + padding)·헤더 높이(45 + 30 + 10)와 맞춘다 */
   --row-h: 48px;
@@ -101,6 +103,36 @@ button {
   border-color: #cfd4dc;
 }
 
+.btn-primary {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.btn-primary:hover {
+  background: #255fd6;
+}
+
+.btn-danger {
+  border: 1px solid transparent;
+  background: none;
+  color: var(--danger);
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
+.btn-danger:hover,
+.btn-danger.armed {
+  background: var(--danger-soft);
+}
+
+.btn-danger.armed {
+  font-weight: 600;
+}
+
 .board {
   display: grid;
   grid-template-columns: 460px minmax(0, 1fr);
@@ -142,12 +174,27 @@ button {
 }
 
 .task-row {
+  width: 100%;
   height: var(--row-h);
+  border: 0;
   border-bottom: 1px solid var(--border);
+  background: none;
+  color: inherit;
+  text-align: left;
 }
 
 .task-row:hover {
   background: #f8f9fb;
+}
+
+.task-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+#task-rows .empty {
+  padding: 24px 16px;
+  color: var(--text-muted);
 }
 
 .task-name {
@@ -202,4 +249,142 @@ button {
 .chart .gantt .bar-label {
   fill: var(--text);
   font-weight: 500;
+}
+
+/* 태스크 추가/수정 모달 */
+.modal {
+  width: min(440px, calc(100vw - 32px));
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  color: var(--text);
+  box-shadow: 0 20px 48px rgb(16 24 40 / 0.18);
+}
+
+.modal::backdrop {
+  background: rgb(16 24 40 / 0.35);
+}
+
+.modal form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+}
+
+.modal h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.field > span,
+.field > legend {
+  display: flex;
+  justify-content: space-between;
+  padding: 0;
+  margin-bottom: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.field > span {
+  margin-bottom: 0;
+}
+
+.field output {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.field input[type='text'],
+.field input[type='date'] {
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  color: inherit;
+}
+
+.field input[type='text']:focus,
+.field input[type='date']:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.field input[type='range'] {
+  accent-color: var(--accent);
+}
+
+.dependency-options {
+  display: flex;
+  flex-direction: column;
+  max-height: 168px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.dep-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.dep-option + .dep-option {
+  border-top: 1px solid var(--border);
+}
+
+.dep-option input {
+  accent-color: var(--accent);
+}
+
+.dep-option:has(input:disabled) {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.dependency-options .muted {
+  margin: 0;
+  padding: 10px;
+  color: var(--text-muted);
+}
+
+.form-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.form-error:empty {
+  display: none;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.modal-actions .spacer {
+  flex: 1;
 }
