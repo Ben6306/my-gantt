@@ -6,6 +6,8 @@ import { loadTasks, saveTasks } from './storage.js';
 import { renderTaskList } from './taskList.js';
 import { openTaskModal } from './taskModal.js';
 import { confirmDialog } from './confirmDialog.js';
+import { backupFileName, buildBackup, parseBackup } from './backup.js';
+import { showToast } from './toast.js';
 import { addDays, escapeHTML, formatDate, joinDeps, parseDeps, toISODate } from './utils.js';
 
 // 이전 버전은 dependencies를 배열로 저장했으므로 문자열 형식으로 맞춘다
@@ -102,6 +104,43 @@ async function resetProject() {
   commit([]);
 }
 
+function exportBackup() {
+  const blob = new Blob([JSON.stringify(buildBackup(tasks), null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = backupFileName();
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url));
+  showToast(`태스크 ${tasks.length}개를 ${a.download} 파일로 내보냈습니다.`);
+}
+
+async function importBackup(file) {
+  let result;
+  try {
+    result = parseBackup(await file.text());
+  } catch (err) {
+    showToast(`불러오지 못했습니다. ${err.message}`, { type: 'error' });
+    return;
+  }
+
+  // 지금 태스크가 없으면 잃을 것이 없으므로 묻지 않는다
+  if (tasks.length) {
+    const ok = await confirmDialog({
+      title: '백업 불러오기',
+      message: `현재 태스크 ${tasks.length}개를 ‘${file.name}’의 태스크 ${result.tasks.length}개로 바꿀까요? 지금 데이터가 필요하면 먼저 내보내기 해 두세요.`,
+      confirmText: '불러오기',
+    });
+    if (!ok) return;
+  }
+
+  selectedId = null;
+  commit(result.tasks);
+  gantt.set_scroll_position('start');
+  const dropped = result.droppedDeps ? ` 없는 선행 태스크를 가리키던 연결 ${result.droppedDeps}개는 뺐습니다.` : '';
+  showToast(`태스크 ${result.tasks.length}개를 불러왔습니다.${dropped}`);
+}
+
 function openAdd() {
   const today = new Date();
   openTaskModal({
@@ -176,6 +215,16 @@ document.querySelectorAll('.view-modes button').forEach((btn) => {
 document.getElementById('today-btn').addEventListener('click', () => gantt.scroll_current());
 document.getElementById('add-btn').addEventListener('click', openAdd);
 document.getElementById('reset-btn').addEventListener('click', resetProject);
+document.getElementById('export-btn').addEventListener('click', exportBackup);
+
+const importInput = document.getElementById('import-file');
+document.getElementById('import-btn').addEventListener('click', () => importInput.click());
+importInput.addEventListener('change', () => {
+  const [file] = importInput.files;
+  // 같은 파일을 다시 골라도 change가 일어나도록 비운다
+  importInput.value = '';
+  if (file) importBackup(file);
+});
 
 rowsEl.addEventListener('click', (e) => {
   const row = e.target.closest('.task-row');
