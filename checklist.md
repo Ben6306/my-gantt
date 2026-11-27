@@ -120,4 +120,4 @@
 - [x] 운영 빌드에서만 등록, index.html에 manifest·아이콘·theme-color
 - [x] vite preview로 확인(서비스 워커 활성·페이지 제어, 아이콘 3종, 서버를 끈 상태에서도 앱이 열림) → 테스트용 SW·캐시 정리
 - [x] README에 설치 방법
-- [ ] 배포 → 실제 사이트 확인
+- [x] 배포 → 실제 사이트 확인 (서비스 워커 활성, 범위 /my-gantt/, manifest·아이콘 경로)
