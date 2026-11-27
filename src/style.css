@@ -10,8 +10,13 @@
   --text-muted: #6b7385;
   --accent: #2f6fed;
   --accent-soft: #dce7fd;
+  --selected: #eef3fe;
   --danger: #d92d20;
   --danger-soft: #fdecea;
+
+  /* 왼쪽 목록 너비: 1200px 화면에서 520px, 넓은 화면에서 최대 640px */
+  --list-w: clamp(520px, 40vw, 640px);
+  --toolbar-h: 56px;
 
   /* frappe-gantt 행 높이(bar_height + padding)·헤더 높이(45 + 30 + 10)와 맞춘다 */
   --row-h: 48px;
@@ -50,12 +55,29 @@ button {
   cursor: pointer;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 전체 화면 레이아웃: 헤더 + 좌우 분할 보드 */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-width: 1200px;
+}
+
 .app-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 20px 24px;
+  padding: 14px 24px;
 }
 
 .app-header h1 {
@@ -64,11 +86,53 @@ button {
   font-weight: 700;
 }
 
-.toolbar {
-  display: flex;
-  gap: 8px;
+.board {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: var(--list-w) minmax(0, 1fr);
+  grid-template-rows: var(--toolbar-h) minmax(0, 1fr);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
 }
 
+.panel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.list-toolbar {
+  justify-content: space-between;
+  border-right: 1px solid var(--border);
+}
+
+.chart-toolbar {
+  justify-content: flex-end;
+}
+
+.task-count {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* 목록과 차트가 함께 세로 스크롤되어 행이 항상 맞는다 */
+.board-body {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: var(--list-w) minmax(0, 1fr);
+  align-items: start;
+  overflow-y: auto;
+  /* 내용이 짧아도 좌우 구분선이 바닥까지 이어지게 한다 */
+  background: linear-gradient(var(--border), var(--border)) no-repeat calc(var(--list-w) - 1px) 0 / 1px 100%;
+  background-attachment: local;
+  min-height: 0;
+}
+
+/* 버튼 */
 .view-modes {
   display: flex;
   padding: 3px;
@@ -79,7 +143,7 @@ button {
 .view-modes button {
   border: 0;
   background: none;
-  padding: 6px 14px;
+  padding: 5px 14px;
   border-radius: 6px;
   color: var(--text-muted);
 }
@@ -124,37 +188,63 @@ button {
   border-radius: 8px;
 }
 
-.btn-danger:hover,
-.btn-danger.armed {
+.btn-danger:hover {
   background: var(--danger-soft);
 }
 
-.btn-danger.armed {
+.btn-danger-solid {
+  border: 1px solid var(--danger);
+  background: var(--danger);
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 8px;
   font-weight: 600;
 }
 
-.board {
+.btn-danger-solid:hover {
+  background: #b42318;
+}
+
+.icon-btn {
   display: grid;
-  grid-template-columns: 460px minmax(0, 1fr);
-  margin: 0 24px 24px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+}
+
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-btn:hover {
+  background: #eceef2;
+  color: var(--text);
+}
+
+.icon-btn.danger:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 /* 왼쪽 태스크 목록 */
-.task-list {
-  border-right: 1px solid var(--border);
-}
-
 .list-head,
 .task-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 88px 88px 96px;
+  grid-template-columns: minmax(0, 1fr) 84px 84px 92px 60px;
   gap: 12px;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 12px 0 16px;
 }
 
 .list-head {
@@ -174,17 +264,18 @@ button {
 }
 
 .task-row {
-  width: 100%;
   height: var(--row-h);
-  border: 0;
   border-bottom: 1px solid var(--border);
-  background: none;
-  color: inherit;
-  text-align: left;
+  cursor: pointer;
 }
 
 .task-row:hover {
   background: #f8f9fb;
+}
+
+.task-row.is-selected {
+  background: var(--selected);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .task-row:focus-visible {
@@ -237,6 +328,12 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+.row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
 /* 오른쪽 간트 차트 */
 .chart {
   min-width: 0;
@@ -251,7 +348,16 @@ button {
   font-weight: 500;
 }
 
-/* 태스크 추가/수정 모달 */
+.chart .gantt .grid-row.is-selected {
+  fill: var(--selected);
+}
+
+.chart .gantt .bar-wrapper.is-selected .bar {
+  stroke: var(--accent);
+  stroke-width: 2px;
+}
+
+/* 모달 공통 */
 .modal {
   width: min(440px, calc(100vw - 32px));
   padding: 0;
@@ -259,6 +365,10 @@ button {
   border-radius: 14px;
   color: var(--text);
   box-shadow: 0 20px 48px rgb(16 24 40 / 0.18);
+}
+
+.modal-sm {
+  width: min(380px, calc(100vw - 32px));
 }
 
 .modal::backdrop {
@@ -277,6 +387,22 @@ button {
   font-size: 18px;
 }
 
+.confirm-message {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.modal-actions .spacer {
+  flex: 1;
+}
+
+/* 태스크 추가/수정 폼 */
 .field {
   display: flex;
   flex-direction: column;
@@ -289,22 +415,14 @@ button {
 
 .field > span,
 .field > legend {
-  display: flex;
-  justify-content: space-between;
   padding: 0;
-  margin-bottom: 6px;
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 600;
 }
 
-.field > span {
-  margin-bottom: 0;
-}
-
-.field output {
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
+.field > legend {
+  margin-bottom: 6px;
 }
 
 .field-row {
@@ -314,7 +432,8 @@ button {
 }
 
 .field input[type='text'],
-.field input[type='date'] {
+.field input[type='date'],
+.field input[type='number'] {
   height: 38px;
   padding: 0 10px;
   border: 1px solid var(--border);
@@ -323,15 +442,10 @@ button {
   color: inherit;
 }
 
-.field input[type='text']:focus,
-.field input[type='date']:focus {
+.field input:is([type='text'], [type='date'], [type='number']):focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
-.field input[type='range'] {
-  accent-color: var(--accent);
 }
 
 .dependency-options {
@@ -378,13 +492,4 @@ button {
 
 .form-error:empty {
   display: none;
-}
-
-.modal-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.modal-actions .spacer {
-  flex: 1;
 }

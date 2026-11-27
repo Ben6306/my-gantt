@@ -1,10 +1,8 @@
-// 첫 실행 시 보여줄 간트 샘플 태스크 데이터
+// 저장된 데이터가 없을 때 보여줄 샘플 태스크 데이터
 export const sampleTasks = [
-  { id: 't1', name: '요구사항 분석', start: '2026-11-23', end: '2026-11-27', progress: 100 },
-  { id: 't2', name: 'UI/UX 디자인', start: '2026-11-30', end: '2026-12-08', progress: 60, dependencies: ['t1'] },
-  { id: 't3', name: '데이터베이스 설계', start: '2026-11-30', end: '2026-12-04', progress: 80, dependencies: ['t1'] },
-  { id: 't4', name: '프론트엔드 개발', start: '2026-12-09', end: '2026-12-22', progress: 10, dependencies: ['t2'] },
-  { id: 't5', name: '백엔드 API 개발', start: '2026-12-07', end: '2026-12-22', progress: 20, dependencies: ['t3'] },
-  { id: 't6', name: '통합 테스트', start: '2026-12-23', end: '2026-12-29', progress: 0, dependencies: ['t4', 't5'] },
-  { id: 't7', name: '배포 및 오픈', start: '2026-12-30', end: '2026-12-31', progress: 0, dependencies: ['t6'] },
+  { id: '1', name: '프로젝트 기획', start: '2026-12-01', end: '2026-12-05', progress: 40, dependencies: '' },
+  { id: '2', name: '요구사항 정리', start: '2026-12-04', end: '2026-12-10', progress: 20, dependencies: '1' },
+  { id: '3', name: '디자인 작업', start: '2026-12-08', end: '2026-12-15', progress: 0, dependencies: '2' },
+  { id: '4', name: '개발', start: '2026-12-12', end: '2026-12-28', progress: 0, dependencies: '3' },
+  { id: '5', name: '테스트 및 배포', start: '2026-12-26', end: '2026-12-31', progress: 0, dependencies: '4' },
 ];

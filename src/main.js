@@ -1,65 +1,57 @@
-// 앱 진입점: 태스크 상태를 들고 왼쪽 목록과 frappe-gantt 차트를 함께 렌더링
+// 앱 진입점: 태스크 상태를 들고 왼쪽 목록·frappe-gantt 차트·모달을 서로 연결
 import Gantt from 'frappe-gantt';
 import './style.css';
 import { sampleTasks } from './sampleTasks.js';
 import { loadTasks, saveTasks } from './storage.js';
+import { renderTaskList } from './taskList.js';
 import { openTaskModal } from './taskModal.js';
+import { confirmDialog } from './confirmDialog.js';
+import { addDays, escapeHTML, formatDate, joinDeps, parseDeps, toISODate } from './utils.js';
 
-let tasks = loadTasks() ?? sampleTasks;
+// 이전 버전은 dependencies를 배열로 저장했으므로 문자열 형식으로 맞춘다
+const normalize = (list) => list.map((t) => ({ ...t, dependencies: joinDeps(parseDeps(t.dependencies)) }));
+
+let tasks = normalize(loadTasks() ?? sampleTasks);
+let selectedId = null;
 
 const rowsEl = document.getElementById('task-rows');
 
-const toISODate = (date) => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-};
-
-const addDays = (date, days) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
-
-const formatDate = (iso) => iso.replaceAll('-', '.');
-
-const escapeHTML = (str) =>
-  str.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-
-const newId = () => `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-
-function renderList() {
-  if (!tasks.length) {
-    const li = document.createElement('li');
-    li.className = 'empty';
-    li.textContent = '태스크가 없습니다. ‘+ 태스크 추가’로 시작해 보세요.';
-    rowsEl.replaceChildren(li);
-    return;
-  }
-
-  rowsEl.replaceChildren(
-    ...tasks.map((task) => {
-      const li = document.createElement('li');
-      li.innerHTML = `
-        <button type="button" class="task-row" data-id="${escapeHTML(task.id)}">
-          <span class="task-name" title="${escapeHTML(task.name)}">${escapeHTML(task.name)}</span>
-          <span class="task-date">${formatDate(task.start)}</span>
-          <span class="task-date">${formatDate(task.end)}</span>
-          <span class="task-progress">
-            <span class="progress-track"><span class="progress-fill" style="width:${task.progress}%"></span></span>
-            <span class="progress-value">${task.progress}%</span>
-          </span>
-        </button>`;
-      return li;
-    }),
-  );
-}
+const nextId = () => String(Math.max(0, ...tasks.map((t) => Number(t.id)).filter(Number.isFinite)) + 1);
 
 // frappe-gantt는 넘겨받은 객체를 직접 수정하므로 복사본을 넘긴다
-const chartTasks = () => tasks.map((t) => ({ ...t, dependencies: [...(t.dependencies ?? [])] }));
+const chartTasks = () => tasks.map((t) => ({ ...t, dependencies: parseDeps(t.dependencies) }));
+
+// 선택된 태스크의 차트 행과 막대를 강조한다. 차트를 다시 그리면 클래스가 사라지므로 렌더링마다 호출한다.
+function highlightChart(chart = gantt) {
+  chart.$svg.querySelectorAll('.is-selected').forEach((el) => el.classList.remove('is-selected'));
+  if (!selectedId) return;
+  const index = tasks.findIndex((t) => t.id === selectedId);
+  chart.$svg.querySelectorAll('.grid-row')[index]?.classList.add('is-selected');
+  chart.$svg.querySelector(`.bar-wrapper[data-id="${CSS.escape(selectedId)}"]`)?.classList.add('is-selected');
+}
+
+function scrollChartTo(id) {
+  const bar = gantt.$svg.querySelector(`.bar-wrapper[data-id="${CSS.escape(id)}"] .bar`);
+  if (!bar) return;
+  gantt.$container.scrollTo({ left: Math.max(0, Number(bar.getAttribute('x')) - 80), behavior: 'smooth' });
+}
+
+function selectTask(id, { scrollChart = false } = {}) {
+  selectedId = id;
+  rowsEl.querySelectorAll('.task-row').forEach((row) => {
+    const selected = row.dataset.id === id;
+    row.classList.toggle('is-selected', selected);
+    row.toggleAttribute('aria-current', selected);
+  });
+  highlightChart();
+  if (scrollChart) scrollChartTo(id);
+}
 
 // 상태를 바꾸는 유일한 경로: 저장 → 목록 갱신 → (필요하면) 차트 다시 그리기
 function commit(next, { redraw = true } = {}) {
   tasks = next;
   saveTasks(tasks);
-  renderList();
+  renderTaskList(tasks, selectedId);
   if (redraw) {
     // refresh는 스크롤을 처음 위치로 되돌리므로 보던 위치를 유지한다
     const { scrollLeft } = gantt.$container;
@@ -68,6 +60,7 @@ function commit(next, { redraw = true } = {}) {
     // 같은 위치로 되돌리면 scroll 이벤트가 안 나서 상단 월 표시(current-upper)가 비므로 직접 발생시킨다
     gantt.$container.dispatchEvent(new Event('scroll'));
   }
+  highlightChart();
 }
 
 function updateTask(id, changes, options) {
@@ -77,21 +70,50 @@ function updateTask(id, changes, options) {
   );
 }
 
-function deleteTask(id) {
+async function requestDelete(id) {
+  const task = tasks.find((t) => t.id === id);
+  if (!task) return false;
+  const ok = await confirmDialog({
+    title: '태스크 삭제',
+    message: `‘${task.name}’ 태스크를 삭제할까요? 삭제하면 되돌릴 수 없습니다.`,
+    confirmText: '삭제',
+  });
+  if (!ok) return false;
+
+  if (selectedId === id) selectedId = null;
   commit(
     tasks
       .filter((t) => t.id !== id)
-      .map((t) => ({ ...t, dependencies: (t.dependencies ?? []).filter((d) => d !== id) })),
+      .map((t) => ({ ...t, dependencies: joinDeps(parseDeps(t.dependencies).filter((d) => d !== id)) })),
   );
+  return true;
+}
+
+async function resetProject() {
+  const ok = await confirmDialog({
+    title: '새 프로젝트',
+    message: tasks.length
+      ? `현재 태스크 ${tasks.length}개를 모두 지우고 빈 프로젝트로 시작할까요? 되돌릴 수 없습니다.`
+      : '이미 빈 프로젝트입니다. 그래도 초기화할까요?',
+    confirmText: '모두 지우기',
+  });
+  if (!ok) return;
+  selectedId = null;
+  commit([]);
 }
 
 function openAdd() {
   const today = new Date();
   openTaskModal({
-    task: { name: '', start: toISODate(today), end: toISODate(addDays(today, 4)), progress: 0, dependencies: [] },
+    task: { name: '', start: toISODate(today), end: toISODate(addDays(today, 4)), progress: 0, dependencies: '' },
     isNew: true,
     tasks,
-    onSave: (data) => commit([...tasks, { id: newId(), ...data }]),
+    onSave: (data) => {
+      const id = nextId();
+      selectedId = id;
+      commit([...tasks, { id, ...data }]);
+      scrollChartTo(id);
+    },
   });
 }
 
@@ -99,12 +121,13 @@ function openEdit(id) {
   const task = tasks.find((t) => t.id === id);
   if (!task) return;
   gantt.hide_popup();
+  selectTask(id);
   openTaskModal({
     task,
     isNew: false,
     tasks,
     onSave: (data) => updateTask(id, data),
-    onDelete: () => deleteTask(id),
+    onDelete: () => requestDelete(id),
   });
 }
 
@@ -127,11 +150,13 @@ const gantt = new Gantt('#gantt', chartTasks(), {
     const end = formatDate(toISODate(new Date(task._end.getTime() - 1000)));
     ctx.set_details(`${start} ~ ${end} (${task.actual_duration}일)<br/>진행률 ${Math.round(task.progress)}%`);
   },
-  // 라이브러리가 정하는 컨테이너 높이는 가로 스크롤바 두께만큼 모자라 세로 스크롤이 생기므로 보정한다
   on_view_change() {
+    // 라이브러리가 정하는 컨테이너 높이는 가로 스크롤바 두께만큼 모자라 세로 스크롤이 생기므로 보정한다
     const el = this.$container;
     el.style.height = `${this.grid_height + (el.offsetHeight - el.clientHeight)}px`;
+    highlightChart(this);
   },
+  on_click: (task) => selectTask(task.id),
   on_double_click: (task) => openEdit(task.id),
   on_date_change: (task, start, end) => {
     updateTask(task.id, { start: toISODate(start), end: toISODate(end) }, { redraw: false });
@@ -150,10 +175,23 @@ document.querySelectorAll('.view-modes button').forEach((btn) => {
 
 document.getElementById('today-btn').addEventListener('click', () => gantt.scroll_current());
 document.getElementById('add-btn').addEventListener('click', openAdd);
+document.getElementById('reset-btn').addEventListener('click', resetProject);
 
 rowsEl.addEventListener('click', (e) => {
   const row = e.target.closest('.task-row');
-  if (row) openEdit(row.dataset.id);
+  if (!row) return;
+  const action = e.target.closest('[data-action]')?.dataset.action;
+  if (action === 'edit') openEdit(row.dataset.id);
+  else if (action === 'delete') requestDelete(row.dataset.id);
+  else selectTask(row.dataset.id, { scrollChart: true });
 });
 
-renderList();
+rowsEl.addEventListener('keydown', (e) => {
+  if (!e.target.classList.contains('task-row')) return;
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    selectTask(e.target.dataset.id, { scrollChart: true });
+  }
+});
+
+renderTaskList(tasks, selectedId);
