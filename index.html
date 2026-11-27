@@ -26,8 +26,9 @@
           />
         </h1>
         <div class="header-actions">
-          <button type="button" id="export-btn" class="btn-ghost" title="Save all tasks to a JSON file">Export</button>
-          <button type="button" id="import-btn" class="btn-ghost" title="Load tasks from an exported JSON file">Import</button>
+          <button type="button" id="png-btn" class="btn-ghost" title="Save the whole schedule as an image, at the current zoom">Export PNG</button>
+          <button type="button" id="export-btn" class="btn-ghost" title="Save all tasks to a JSON backup file">Export JSON</button>
+          <button type="button" id="import-btn" class="btn-ghost" title="Load tasks from a JSON backup file">Import JSON</button>
           <input type="file" id="import-file" accept=".json,application/json" hidden />
           <button type="button" id="reset-btn" class="btn-ghost">New project</button>
         </div>
@@ -42,7 +43,16 @@
           </button>
         </div>
         <div class="panel-toolbar chart-toolbar">
-          <div class="view-modes" role="group" aria-label="Zoom">
+          <div class="zoom" role="group" aria-label="Zoom">
+            <button type="button" id="zoom-out" aria-label="Zoom out" title="Zoom out">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /><path d="M8 11h6" /></svg>
+            </button>
+            <button type="button" id="zoom-in" aria-label="Zoom in" title="Zoom in">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /><path d="M11 8v6" /><path d="M8 11h6" /></svg>
+            </button>
+            <button type="button" id="fit-btn" title="Fit the whole schedule on screen">Fit</button>
+          </div>
+          <div class="view-modes" role="group" aria-label="Time scale">
             <button type="button" data-mode="Day" class="active">Day</button>
             <button type="button" data-mode="Week">Week</button>
             <button type="button" data-mode="Month">Month</button>

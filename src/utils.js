@@ -8,13 +8,24 @@ export const toISODate = (date) => {
 
 export const addDays = (date, days) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 
+// "2026-12-01" → 현지 시각 자정의 Date (new Date("2026-12-01")은 UTC로 해석되어 하루 밀릴 수 있다)
+export const parseISODate = (iso) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d);
+};
+
 const dateFormat = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-// "2026-12-01" → "Dec 1, 2026" (UTC로 해석되지 않도록 현지 날짜로 만든다)
-export const formatDate = (iso) => {
-  const [y, m, d] = iso.split('-').map(Number);
-  return dateFormat.format(new Date(y, m - 1, d));
-};
+// "2026-12-01" → "Dec 1, 2026"
+export const formatDate = (iso) => dateFormat.format(parseISODate(iso));
+
+// 파일 이름에 쓸 수 없는 문자는 빼고 공백은 하이픈으로. 이름이 비면 "gantt"
+export const fileStem = (name) =>
+  String(name ?? '')
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, '')
+    .replace(/\s+/g, '-')
+    .slice(0, 40) || 'gantt';
 
 // plural(1, 'task') → "1 task", plural(3, 'task') → "3 tasks"
 export const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;

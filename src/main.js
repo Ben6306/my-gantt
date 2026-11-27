@@ -10,8 +10,10 @@ import { openTaskModal } from './taskModal.js';
 import { confirmDialog } from './confirmDialog.js';
 import { backupFileName, buildBackup, parseBackup } from './backup.js';
 import { showToast } from './toast.js';
-import { addDays, escapeHTML, formatDate, joinDeps, parseDeps, plural, toISODate } from './utils.js';
+import { addDays, escapeHTML, formatDate, joinDeps, parseDeps, parseISODate, plural, toISODate } from './utils.js';
 import { colorFor, isColorKey } from './colors.js';
+import { DEFAULT_ZOOM, MODE_DEFAULT_ZOOM, ZOOM_LEVELS, fitZoom, spanDays } from './zoom.js';
+import { exportPng } from './exportPng.js';
 
 const DEFAULT_PROJECT_NAME = 'Untitled project';
 
@@ -26,14 +28,17 @@ const normalize = (list) =>
 let tasks = normalize(loadTasks() ?? sampleTasks);
 let selectedId = null;
 let projectName = '';
+let zoomIndex = DEFAULT_ZOOM;
 
 const rowsEl = document.getElementById('task-rows');
 const projectNameInput = document.getElementById('project-name');
 
 const nextId = () => String(Math.max(0, ...tasks.map((t) => Number(t.id)).filter(Number.isFinite)) + 1);
 
-// 막대 색은 custom_class(.c-<색>)로 style.css에서 입힌다
-const chartTasks = () => tasks.map((t) => ({ ...t, dependencies: parseDeps(t.dependencies), custom_class: `c-${t.color}` }));
+// 막대 색은 custom_class(.c-<색>)로 style.css에서 입힌다.
+// color는 넘기지 않는다: frappe-gantt가 task.color를 막대 fill에 그대로 넣어서 'blue'·'red'가 원색으로 칠해진다.
+const chartTasks = () =>
+  tasks.map(({ color, ...t }) => ({ ...t, dependencies: parseDeps(t.dependencies), custom_class: `c-${color}` }));
 
 function setProjectName(name, { save = true } = {}) {
   projectName = name.trim() || DEFAULT_PROJECT_NAME;
@@ -58,24 +63,57 @@ function scrollChartTo(id) {
 }
 
 /*
- * 차트를 다시 그려도 보던 위치를 지키기 위해 왼쪽 끝의 '날짜'를 기억한다.
+ * 차트를 다시 그리거나 줌해도 보던 곳을 지키기 위해 픽셀 대신 '시각'을 기억한다.
  * frappe-gantt는 스크롤할 때 시작 날짜를 앞으로 계속 늘리고(infinite_padding), refresh하면 원래 범위로 되돌린다.
  * 그래서 픽셀 위치를 그대로 되돌리면 엉뚱한 날짜(몇 달 뒤)로 가 버린다.
+ * gantt.dates는 칸마다 시작 시각이라 칸 너비·보기 단위가 바뀌어도 같은 시각을 찾을 수 있다.
  */
-function captureScrollDate() {
-  const { column_width } = gantt.config;
-  const left = gantt.$container.scrollLeft;
-  const index = Math.min(Math.floor(left / column_width), gantt.dates.length - 1);
-  return { time: gantt.dates[index].getTime(), offset: left - index * column_width };
+// 차트 화면 왼쪽에서 px만큼 떨어진 지점의 시각(ms)
+function timeAtView(px) {
+  const { dates } = gantt;
+  const cw = gantt.config.column_width;
+  const pos = gantt.$container.scrollLeft + px;
+  const i = Math.min(Math.max(Math.floor(pos / cw), 0), dates.length - 2);
+  return dates[i].getTime() + ((pos - i * cw) / cw) * (dates[i + 1] - dates[i]);
 }
 
-function restoreScrollDate({ time, offset }) {
-  // 주 단위 보기는 칸 시작일이 달라질 수 있어 가장 가까운 칸을 찾는다
-  let nearest = 0;
-  gantt.dates.forEach((d, i) => {
-    if (Math.abs(d.getTime() - time) < Math.abs(gantt.dates[nearest].getTime() - time)) nearest = i;
-  });
-  gantt.$container.scrollLeft = nearest * gantt.config.column_width + offset;
+// 그 시각이 차트 화면 왼쪽에서 px 떨어진 곳에 오도록 스크롤
+function scrollTimeTo(time, px) {
+  const { dates } = gantt;
+  const cw = gantt.config.column_width;
+  let i = dates.findIndex((d, k) => k === dates.length - 1 || dates[k + 1].getTime() > time);
+  i = Math.min(Math.max(i, 0), dates.length - 2);
+  const pos = i * cw + ((time - dates[i]) / (dates[i + 1] - dates[i])) * cw;
+  gantt.$container.scrollLeft = Math.max(0, pos - px);
+}
+
+function applyZoom(index, { anchorTime } = {}) {
+  zoomIndex = Math.min(Math.max(index, 0), ZOOM_LEVELS.length - 1);
+  const level = ZOOM_LEVELS[zoomIndex];
+  const center = gantt.$container.clientWidth / 2;
+  // 줌 전후로 화면 가운데 날짜가 그대로 있게 한다
+  const time = anchorTime ?? timeAtView(center);
+  gantt.options.column_width = level.columnWidth;
+  gantt.change_view_mode(level.mode);
+  scrollTimeTo(time, anchorTime === undefined ? center : 0);
+  gantt.$container.dispatchEvent(new Event('scroll'));
+  updateZoomControls();
+}
+
+function updateZoomControls() {
+  const { mode } = ZOOM_LEVELS[zoomIndex];
+  document.querySelectorAll('.view-modes button').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
+  document.getElementById('zoom-in').disabled = zoomIndex === 0;
+  document.getElementById('zoom-out').disabled = zoomIndex === ZOOM_LEVELS.length - 1;
+}
+
+// 일정 전체가 한 화면에 들어오는 단계로 바꾸고, 첫 태스크가 왼쪽에서 한 칸 띄워 보이게 한다
+function fitToScreen() {
+  if (!tasks.length) return;
+  const index = fitZoom(spanDays(tasks), gantt.$container.clientWidth);
+  const first = tasks.reduce((m, t) => (t.start < m ? t.start : m), tasks[0].start);
+  applyZoom(index, { anchorTime: parseISODate(first).getTime() });
+  gantt.$container.scrollLeft -= gantt.config.column_width;
 }
 
 // 상태를 바꾸는 유일한 경로: 저장 → 목록 갱신 → (필요하면) 차트 다시 그리기
@@ -84,9 +122,9 @@ function commit(next, { redraw = true } = {}) {
   saveTasks(tasks);
   renderTaskList(tasks, selectedId);
   if (redraw) {
-    const scrollDate = captureScrollDate();
+    const time = timeAtView(0);
     gantt.refresh(chartTasks());
-    restoreScrollDate(scrollDate);
+    scrollTimeTo(time, 0);
     // 같은 위치로 되돌리면 scroll 이벤트가 안 나서 상단 월 표시(current-upper)가 비므로 직접 발생시킨다
     gantt.$container.dispatchEvent(new Event('scroll'));
   }
@@ -145,6 +183,23 @@ async function resetProject() {
   // 바로 새 이름을 입력할 수 있게 한다
   projectNameInput.focus();
   projectNameInput.select();
+}
+
+async function exportImage(button) {
+  if (!tasks.length) {
+    showToast('Add a task before exporting an image.');
+    return;
+  }
+  button.disabled = true;
+  try {
+    const { mode, columnWidth } = ZOOM_LEVELS[zoomIndex];
+    const fileName = await exportPng({ tasks, projectName, mode, columnWidth });
+    showToast(`Exported ${plural(tasks.length, 'task')} to ${fileName}.`);
+  } catch (err) {
+    showToast(`Couldn’t export the image. ${err.message}`, { type: 'error' });
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function exportBackup() {
@@ -227,7 +282,9 @@ function openEdit(id) {
 
 const gantt = new Gantt('#gantt', chartTasks(), {
   language: 'en',
-  view_mode: 'Day',
+  view_mode: ZOOM_LEVELS[DEFAULT_ZOOM].mode,
+  // 줌은 이 값을 바꿔서 한다 (지정하면 모든 보기 단위의 칸 너비를 덮어쓴다)
+  column_width: ZOOM_LEVELS[DEFAULT_ZOOM].columnWidth,
   // 행 높이 = bar_height + padding = 40, 헤더 높이 = 36 + 30 + 10 = 76 (style.css의 --row-h, --head-h와 맞춘다)
   bar_height: 24,
   padding: 16,
@@ -262,13 +319,14 @@ const gantt = new Gantt('#gantt', chartTasks(), {
 });
 
 document.querySelectorAll('.view-modes button').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.view-modes button').forEach((b) => b.classList.toggle('active', b === btn));
-    gantt.change_view_mode(btn.dataset.mode);
-  });
+  btn.addEventListener('click', () => applyZoom(MODE_DEFAULT_ZOOM[btn.dataset.mode]));
 });
+document.getElementById('zoom-in').addEventListener('click', () => applyZoom(zoomIndex - 1));
+document.getElementById('zoom-out').addEventListener('click', () => applyZoom(zoomIndex + 1));
+document.getElementById('fit-btn').addEventListener('click', fitToScreen);
 
 document.getElementById('today-btn').addEventListener('click', () => gantt.scroll_current());
+document.getElementById('png-btn').addEventListener('click', (e) => exportImage(e.currentTarget));
 document.getElementById('add-btn').addEventListener('click', openAdd);
 document.getElementById('reset-btn').addEventListener('click', resetProject);
 document.getElementById('export-btn').addEventListener('click', exportBackup);
@@ -311,3 +369,4 @@ rowsEl.addEventListener('keydown', (e) => {
 
 setProjectName(loadProjectName() ?? DEFAULT_PROJECT_NAME, { save: false });
 renderTaskList(tasks, selectedId);
+updateZoomControls();

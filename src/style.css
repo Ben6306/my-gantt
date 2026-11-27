@@ -321,6 +321,45 @@ button {
   color: var(--text);
 }
 
+.zoom {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+}
+
+.zoom button {
+  display: inline-grid;
+  place-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-2);
+  font-size: 13px;
+  transition:
+    background-color 150ms var(--ease),
+    color 150ms var(--ease);
+}
+
+.zoom button:has(svg) {
+  width: 28px;
+  padding: 0;
+}
+
+.zoom button:hover:not(:disabled) {
+  background: var(--raised-hover);
+  color: var(--text);
+}
+
+.zoom button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .view-modes button.active {
   background: var(--raised-hover);
   color: var(--text);

@@ -1,5 +1,5 @@
 // 태스크를 JSON 백업 파일로 만들고, 불러온 백업 파일을 검증·정규화하는 순수 함수 모음
-import { joinDeps, parseDeps, toISODate } from './utils.js';
+import { fileStem, joinDeps, parseDeps, toISODate } from './utils.js';
 import { colorFor, isColorKey } from './colors.js';
 
 const APP_ID = 'my-gantt';
@@ -15,15 +15,7 @@ export function buildBackup({ tasks, projectName }, now = new Date()) {
   };
 }
 
-// 파일 이름에 쓸 수 없는 문자는 빼고 공백은 하이픈으로. 이름이 비면 "gantt"
-export function backupFileName(projectName, now = new Date()) {
-  const safe = String(projectName ?? '')
-    .trim()
-    .replace(/[\\/:*?"<>|]+/g, '')
-    .replace(/\s+/g, '-')
-    .slice(0, 40);
-  return `${safe || 'gantt'}-${toISODate(now)}.json`;
-}
+export const backupFileName = (projectName, now = new Date()) => `${fileStem(projectName)}-${toISODate(now)}.json`;
 
 // "2026-02-30"처럼 형식은 맞지만 없는 날짜도 걸러낸다
 function isValidDate(value) {
