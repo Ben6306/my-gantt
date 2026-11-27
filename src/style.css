@@ -396,6 +396,23 @@ button {
   color: var(--text);
 }
 
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: none;
+  color: var(--text-3);
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbar-actions .btn-primary {
+  margin-left: 8px;
+}
+
 .icon-btn.danger:hover {
   background: var(--danger-soft);
   color: var(--danger);

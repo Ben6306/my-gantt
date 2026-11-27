@@ -37,10 +37,18 @@
       <main class="board">
         <div class="panel-toolbar list-toolbar">
           <span id="task-count" class="task-count"></span>
-          <button type="button" id="add-btn" class="btn-primary">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
-            Add task
-          </button>
+          <div class="toolbar-actions">
+            <button type="button" id="undo-btn" class="icon-btn" aria-label="Undo" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
+            </button>
+            <button type="button" id="redo-btn" class="icon-btn" aria-label="Redo" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></svg>
+            </button>
+            <button type="button" id="add-btn" class="btn-primary">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
+              Add task
+            </button>
+          </div>
         </div>
         <div class="panel-toolbar chart-toolbar">
           <div class="zoom" role="group" aria-label="Zoom">

@@ -14,6 +14,7 @@ import { addDays, escapeHTML, formatDate, joinDeps, parseDeps, parseISODate, plu
 import { colorFor, isColorKey } from './colors.js';
 import { DEFAULT_ZOOM, MODE_DEFAULT_ZOOM, ZOOM_LEVELS, fitZoom, spanDays } from './zoom.js';
 import { exportPng } from './exportPng.js';
+import { createHistory } from './history.js';
 
 const DEFAULT_PROJECT_NAME = 'Untitled project';
 
@@ -30,6 +31,32 @@ let selectedId = null;
 let projectName = '';
 let zoomIndex = DEFAULT_ZOOM;
 
+// 실행 취소 이력은 메모리에만 둔다 (새로고침하면 사라짐)
+const history = createHistory(100);
+const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+const UNDO_KEY = isMac ? '⌘Z' : 'Ctrl+Z';
+const REDO_KEY = isMac ? '⇧⌘Z' : 'Ctrl+Y';
+let recordingBatch = false;
+// 차트에서 막대를 끄는 동안 frappe-gantt는 마우스가 움직일 때마다 날짜 변경을 알린다(bar.js update_bar_position).
+// 누른 순간부터 뗄 때까지를 한 번으로 기록하기 위한 상태
+let pointerDownOnChart = false;
+let gestureRecorded = false;
+
+// 바뀌기 전 상태를 이력에 남긴다. 한 동작에서 이어지는 변경은 하나로 묶는다
+// (막대를 끄는 동안의 연속 변경과 의존 태스크 이동, 태스크와 이름을 함께 바꾸는 불러오기)
+function record(label) {
+  if (recordingBatch) return;
+  if (pointerDownOnChart) {
+    if (gestureRecorded) return;
+    gestureRecorded = true;
+  }
+  history.record({ tasks, projectName }, label);
+  recordingBatch = true;
+  setTimeout(() => {
+    recordingBatch = false;
+  });
+}
+
 const rowsEl = document.getElementById('task-rows');
 const projectNameInput = document.getElementById('project-name');
 
@@ -40,11 +67,14 @@ const nextId = () => String(Math.max(0, ...tasks.map((t) => Number(t.id)).filter
 const chartTasks = () =>
   tasks.map(({ color, ...t }) => ({ ...t, dependencies: parseDeps(t.dependencies), custom_class: `c-${color}` }));
 
-function setProjectName(name, { save = true } = {}) {
-  projectName = name.trim() || DEFAULT_PROJECT_NAME;
+function setProjectName(name, { save = true, label } = {}) {
+  const next = name.trim() || DEFAULT_PROJECT_NAME;
+  if (label && next !== projectName) record(label);
+  projectName = next;
   projectNameInput.value = projectName;
   document.title = `${projectName} · Gantt`;
   if (save) saveProjectName(projectName);
+  updateHistoryControls();
 }
 
 // 선택된 태스크의 차트 행과 막대를 강조한다. 차트를 다시 그리면 클래스가 사라지므로 렌더링마다 호출한다.
@@ -116,8 +146,9 @@ function fitToScreen() {
   gantt.$container.scrollLeft -= gantt.config.column_width;
 }
 
-// 상태를 바꾸는 유일한 경로: 저장 → 목록 갱신 → (필요하면) 차트 다시 그리기
-function commit(next, { redraw = true } = {}) {
+// 태스크를 바꾸는 유일한 경로: (label이 있으면) 이력 기록 → 저장 → 목록 갱신 → (필요하면) 차트 다시 그리기
+function commit(next, { redraw = true, label } = {}) {
+  if (label) record(label);
   tasks = next;
   saveTasks(tasks);
   renderTaskList(tasks, selectedId);
@@ -129,6 +160,36 @@ function commit(next, { redraw = true } = {}) {
     gantt.$container.dispatchEvent(new Event('scroll'));
   }
   highlightChart();
+  updateHistoryControls();
+}
+
+function updateHistoryControls() {
+  const undoBtn = document.getElementById('undo-btn');
+  const redoBtn = document.getElementById('redo-btn');
+  undoBtn.disabled = !history.canUndo;
+  redoBtn.disabled = !history.canRedo;
+  undoBtn.title = history.canUndo ? `Undo ${history.undoLabel} (${UNDO_KEY})` : `Undo (${UNDO_KEY})`;
+  redoBtn.title = history.canRedo ? `Redo ${history.redoLabel} (${REDO_KEY})` : `Redo (${REDO_KEY})`;
+}
+
+function applySnapshot(state) {
+  if (selectedId && !state.tasks.some((t) => t.id === selectedId)) selectedId = null;
+  commit(state.tasks);
+  setProjectName(state.projectName);
+}
+
+function undo() {
+  const entry = history.undo({ tasks, projectName });
+  if (!entry) return;
+  applySnapshot(entry.state);
+  showToast(`Undid: ${entry.label}`);
+}
+
+function redo() {
+  const entry = history.redo({ tasks, projectName });
+  if (!entry) return;
+  applySnapshot(entry.state);
+  showToast(`Redid: ${entry.label}`);
 }
 
 function selectTask(id, { scrollChart = false } = {}) {
@@ -154,7 +215,7 @@ async function requestDelete(id) {
   if (!task) return false;
   const ok = await confirmDialog({
     title: 'Delete task',
-    message: `Delete “${task.name}”? This can’t be undone.`,
+    message: `Delete “${task.name}”? You can undo this with ${UNDO_KEY}.`,
     confirmText: 'Delete',
   });
   if (!ok) return false;
@@ -164,6 +225,7 @@ async function requestDelete(id) {
     tasks
       .filter((t) => t.id !== id)
       .map((t) => ({ ...t, dependencies: joinDeps(parseDeps(t.dependencies).filter((d) => d !== id)) })),
+    { label: `Delete “${task.name}”` },
   );
   return true;
 }
@@ -172,13 +234,13 @@ async function resetProject() {
   const ok = await confirmDialog({
     title: 'New project',
     message: tasks.length
-      ? `Delete all ${plural(tasks.length, 'task')} in “${projectName}” and start an empty project? This can’t be undone.`
+      ? `Delete all ${plural(tasks.length, 'task')} in “${projectName}” and start an empty project? You can undo this with ${UNDO_KEY}.`
       : 'This project is already empty. Reset it anyway?',
     confirmText: tasks.length ? 'Delete all' : 'Reset',
   });
   if (!ok) return;
   selectedId = null;
-  commit([]);
+  commit([], { label: 'New project' });
   setProjectName(DEFAULT_PROJECT_NAME);
   // 바로 새 이름을 입력할 수 있게 한다
   projectNameInput.focus();
@@ -226,14 +288,14 @@ async function importBackup(file) {
   if (tasks.length) {
     const ok = await confirmDialog({
       title: 'Import backup',
-      message: `Replace the ${plural(tasks.length, 'task')} in “${projectName}” with ${plural(result.tasks.length, 'task')} from “${file.name}”? Export first if you need the current data.`,
+      message: `Replace the ${plural(tasks.length, 'task')} in “${projectName}” with ${plural(result.tasks.length, 'task')} from “${file.name}”? You can undo this with ${UNDO_KEY}.`,
       confirmText: 'Import',
     });
     if (!ok) return;
   }
 
   selectedId = null;
-  commit(result.tasks);
+  commit(result.tasks, { label: 'Import JSON' });
   if (result.projectName) setProjectName(result.projectName);
   gantt.set_scroll_position('start');
   const dropped = result.droppedDeps ? ` Removed ${plural(result.droppedDeps, 'link')} to missing tasks.` : '';
@@ -256,7 +318,7 @@ function openAdd() {
     onSave: (data) => {
       const id = nextId();
       selectedId = id;
-      commit([...tasks, { id, ...data }]);
+      commit([...tasks, { id, ...data }], { label: `Add “${data.name}”` });
       scrollChartTo(id);
     },
   });
@@ -272,7 +334,7 @@ function openEdit(id) {
     isNew: false,
     tasks,
     onSave: (data) => {
-      updateTask(id, data);
+      updateTask(id, data, { label: `Edit “${task.name}”` });
       // 날짜를 바꿨을 수 있으므로 저장한 태스크가 보이는 곳으로 이동한다
       scrollChartTo(id);
     },
@@ -311,10 +373,10 @@ const gantt = new Gantt('#gantt', chartTasks(), {
   on_click: (task) => selectTask(task.id),
   on_double_click: (task) => openEdit(task.id),
   on_date_change: (task, start, end) => {
-    updateTask(task.id, { start: toISODate(start), end: toISODate(end) }, { redraw: false });
+    updateTask(task.id, { start: toISODate(start), end: toISODate(end) }, { redraw: false, label: `Move “${task.name}”` });
   },
   on_progress_change: (task, progress) => {
-    updateTask(task.id, { progress: Math.round(progress) }, { redraw: false });
+    updateTask(task.id, { progress: Math.round(progress) }, { redraw: false, label: `Change progress of “${task.name}”` });
   },
 });
 
@@ -340,8 +402,39 @@ importInput.addEventListener('change', () => {
   if (file) importBackup(file);
 });
 
+// 캡처 단계로 받아 frappe 처리보다 먼저 표시한다. 떼는 것은 frappe의 svg mouseup(마지막 날짜 변경) 뒤에 document에서 풀린다.
+gantt.$container.addEventListener(
+  'mousedown',
+  () => {
+    pointerDownOnChart = true;
+    gestureRecorded = false;
+  },
+  true,
+);
+document.addEventListener('mouseup', () => {
+  pointerDownOnChart = false;
+});
+
+document.getElementById('undo-btn').addEventListener('click', undo);
+document.getElementById('redo-btn').addEventListener('click', redo);
+
+// ⌘Z/⇧⌘Z (윈도우 Ctrl+Z/Ctrl+Y). 입력칸에서는 글자 되돌리기가 되도록, 모달이 열려 있으면 건드리지 않는다
+document.addEventListener('keydown', (e) => {
+  if (e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+  if (document.querySelector('dialog[open]')) return;
+  if (!(isMac ? e.metaKey : e.ctrlKey) || e.altKey) return;
+  const key = e.key.toLowerCase();
+  if (key === 'z' && !e.shiftKey) {
+    e.preventDefault();
+    undo();
+  } else if ((key === 'z' && e.shiftKey) || (key === 'y' && !isMac)) {
+    e.preventDefault();
+    redo();
+  }
+});
+
 // 프로젝트 이름: 입력을 마치면(포커스가 빠지면) 저장, Enter로 확정, Esc로 취소
-projectNameInput.addEventListener('change', () => setProjectName(projectNameInput.value));
+projectNameInput.addEventListener('change', () => setProjectName(projectNameInput.value, { label: 'Rename project' }));
 projectNameInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') projectNameInput.blur();
   if (e.key === 'Escape') {
