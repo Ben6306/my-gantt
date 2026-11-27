@@ -676,13 +676,14 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
   });
 }
 
-initListResizer({
+const listResizer = initListResizer({
   board: document.querySelector('.board'),
   handle: document.getElementById('list-resizer'),
   getNames: () => tasks.map((t) => t.name),
   // 차트 폭이 바뀌면 가로 스크롤바가 생기거나 사라질 수 있어 목록 아래 여백을 다시 맞춘다
   onResize: () => fitListSpacer(),
 });
+document.getElementById('fit-names-btn').addEventListener('click', () => listResizer.fitToNames());
 
 setProjectName(currentProject().name, { save: false });
 // 예전 데이터에서 옮겨 온 경우 새 형식으로 바로 저장해 둔다 (예전 키는 그대로 남는다)

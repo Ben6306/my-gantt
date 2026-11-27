@@ -106,7 +106,18 @@
         <div class="board-body">
           <section class="task-list" aria-label="Tasks">
             <div class="list-head">
-              <span>Task</span>
+              <span class="list-head-task">
+                Task
+                <button
+                  type="button"
+                  id="fit-names-btn"
+                  class="icon-btn icon-btn-sm"
+                  aria-label="Fit column to task names"
+                  title="Fit column to task names (or drag / double-click the divider)"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m18 8 4 4-4 4" /><path d="M2 12h20" /><path d="m6 8-4 4 4 4" /></svg>
+                </button>
+              </span>
               <span>Start</span>
               <span>End</span>
               <span>Progress</span>

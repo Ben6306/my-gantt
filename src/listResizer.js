@@ -2,7 +2,8 @@
 import { loadListWidth, saveListWidth } from './storage.js';
 
 const MIN_WIDTH = 480;
-const MIN_CHART = 360;
+// 차트 툴바(줌·Day/Week/Month·Today)가 약 385px라 이보다 좁으면 왼쪽 버튼 위로 넘친다
+const MIN_CHART = 400;
 const MAX_WIDTH = 1200;
 const KEY_STEP = 16;
 const KEY_STEP_LARGE = 64;
@@ -57,11 +58,12 @@ export function initListResizer({ board, handle, getNames, onResize }) {
     handle.addEventListener('pointercancel', up);
   });
 
-  // 더블클릭: 가장 긴 이름이 잘리지 않는 폭으로. 목록과 같은 글꼴로 실제 너비를 잰다
-  handle.addEventListener('dblclick', () => {
+  // 가장 긴 이름이 잘리지 않는 폭으로 (경계선 더블클릭, 열 제목의 맞추기 버튼). 목록과 같은 글꼴로 실제 너비를 잰다
+  function fitToNames() {
     const probe = document.createElement('span');
     probe.className = 'task-name-text';
-    probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;left:-9999px';
+    // 두 줄 말줄임 스타일은 끄고 한 줄 폭을 잰다
+    probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;display:inline-block;left:-9999px';
     document.body.append(probe);
     let longest = 0;
     for (const name of getNames()) {
@@ -70,7 +72,8 @@ export function initListResizer({ board, handle, getNames, onResize }) {
     }
     probe.remove();
     apply(Math.ceil(longest) + FIXED_PART, { save: true });
-  });
+  }
+  handle.addEventListener('dblclick', fitToNames);
 
   handle.addEventListener('keydown', (e) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
@@ -84,4 +87,6 @@ export function initListResizer({ board, handle, getNames, onResize }) {
     const saved = loadListWidth();
     if (Number.isFinite(saved) && saved > 0) apply(saved);
   });
+
+  return { fitToNames };
 }

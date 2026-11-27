@@ -550,10 +550,15 @@ button {
   background: var(--c);
 }
 
+/* 긴 이름은 행 높이(40px) 안에서 두 줄까지 보이고, 그래도 넘치면 … (전체 이름은 마우스를 올리면 툴팁) */
 .task-name-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  line-height: 17px;
+  overflow-wrap: anywhere;
 }
 
 .task-date {
@@ -1020,14 +1025,14 @@ button {
   }
 }
 
-/* 목록·차트 경계선 손잡이: 경계선 위에 6px 폭으로 겹쳐 두고, 올리거나 끌 때만 보라 선을 보인다 */
+/* 목록·차트 경계선 손잡이: 경계선 위에 10px 폭으로 겹쳐 두고, 올리거나 끌 때 보라 선을 보인다 */
 .list-resizer {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: calc(var(--list-w) - 3px);
+  left: calc(var(--list-w) - 5px);
   z-index: 5;
-  width: 6px;
+  width: 10px;
   cursor: col-resize;
   touch-action: none;
 }
@@ -1037,7 +1042,7 @@ button {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 2px;
+  left: 4px;
   width: 2px;
   background: var(--accent);
   opacity: 0;
@@ -1052,6 +1057,48 @@ button {
 
 .list-resizer:focus-visible {
   outline: none;
+}
+
+/* 늘 보이는 손잡이 표시: 열 제목 줄 높이의 경계선 위에 작은 세로 막대 */
+.list-resizer::before {
+  content: '';
+  position: absolute;
+  top: calc(var(--toolbar-h) + var(--head-h) / 2 - 14px);
+  left: 2px;
+  z-index: 1;
+  width: 6px;
+  height: 28px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 3px;
+  background: var(--raised-hover);
+  transition:
+    background-color 120ms var(--ease),
+    border-color 120ms var(--ease);
+}
+
+.list-resizer:hover::before,
+.list-resizer:focus-visible::before,
+.is-resizing .list-resizer::before {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+/* 열 제목 'Task' 옆의 이름에 맞추기 버튼 */
+.list-head-task {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.icon-btn.icon-btn-sm {
+  width: 22px;
+  height: 22px;
+  margin: -4px 0;
+}
+
+.icon-btn.icon-btn-sm svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* 끄는 동안 글자가 선택되거나 커서가 바뀌지 않게 */
