@@ -112,3 +112,12 @@
 - [x] 빌드·테스트(36개) 통과
 - [x] 브라우저 확인 (헤더 고정, 양쪽 스크롤 동기화, 맨 아래 행 어긋남 0px)
 - [x] 버그: 막대가 모두 안 보임 → #gantt에 높이 지정
+
+## 12단계 — 설치형 웹앱(PWA)
+- [x] 아이콘: 192/512, maskable 512, apple-touch-icon 180, SVG 파비콘 (scripts/make-icons.mjs로 생성)
+- [x] manifest.webmanifest (상대 경로, standalone, 다크 색상)
+- [x] service worker: 페이지는 네트워크 우선(오프라인 시 캐시), 해시 자산·글꼴은 캐시 우선, 오래된 캐시 정리
+- [x] 운영 빌드에서만 등록, index.html에 manifest·아이콘·theme-color
+- [x] vite preview로 확인(서비스 워커 활성·페이지 제어, 아이콘 3종, 서버를 끈 상태에서도 앱이 열림) → 테스트용 SW·캐시 정리
+- [x] README에 설치 방법
+- [ ] 배포 → 실제 사이트 확인

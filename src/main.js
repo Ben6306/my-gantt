@@ -554,6 +554,13 @@ rowsEl.addEventListener('dragend', () => {
   rowsEl.querySelector('.is-dragging')?.classList.remove('is-dragging');
 });
 
+// 설치형 웹앱(PWA): 배포 빌드에서만 서비스 워커를 등록한다. 개발 서버에서 등록하면 옛 파일이 캐시에 남아 헷갈린다
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {
+    // 등록에 실패해도(사생활 보호 모드 등) 앱은 온라인으로 그대로 쓸 수 있다
+  });
+}
+
 setProjectName(loadProjectName() ?? DEFAULT_PROJECT_NAME, { save: false });
 renderTaskList(tasks, selectedId);
 updateZoomControls();

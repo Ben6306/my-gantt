@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+  <!-- 브라우저 탭 아이콘: 헤더 로고와 같은 색 막대 3개 -->
+  <rect width="20" height="20" rx="4.5" fill="#141415" />
+  <g transform="translate(10 10) scale(0.72) translate(-10 -10)">
+    <rect x="2" y="3" width="10" height="4" rx="2" fill="#7b68ee" />
+    <rect x="6" y="8" width="12" height="4" rx="2" fill="#4a90f7" />
+    <rect x="4" y="13" width="8" height="4" rx="2" fill="#3fbf6a" />
+  </g>
+</svg>

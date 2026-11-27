@@ -4,7 +4,18 @@ Vite + Vanilla JS + [frappe-gantt](https://github.com/frappe/gantt)로 만든 �
 
 **바로 쓰기**: https://ben6306.github.io/my-gantt/
 
-## 실행
+## 앱으로 설치하기 (추천)
+
+터미널 없이 아이콘을 눌러 여는 방법입니다. 한 번 열어 두면 인터넷이 없어도 실행됩니다.
+
+- **Chrome**: https://ben6306.github.io/my-gantt/ 을 열고 주소창 오른쪽의 설치 아이콘(모니터에 ↓)을 누르거나, ⋮ 메뉴 → 전송, 저장, 공유 → 페이지를 앱으로 설치. 응용 프로그램 폴더·Launchpad에 "Gantt"가 생기고 Dock에 끌어다 둘 수 있습니다.
+- **Safari** (macOS Sonoma 이상): 사이트를 열고 파일 → Dock에 추가.
+
+데이터는 설치한 앱의 저장 공간에 따로 저장됩니다. 다른 곳(localhost, 다른 브라우저)에서 쓰던 태스크는 그쪽에서 **Export JSON** → 앱에서 **Import JSON**으로 옮기세요. Safari로 Dock에 추가한 앱은 Safari와도 저장 공간이 따로입니다.
+
+새 버전을 배포하면 인터넷이 연결된 상태에서 앱을 열 때 자동으로 새 버전이 열립니다.
+
+## 개발용 실행
 
 ```bash
 npm install
@@ -49,6 +60,12 @@ src/
   exportPng.js        PNG를 캔버스에 그려 내려받기
   history.js          실행 취소/다시 실행 이력
   style.css           레이아웃과 frappe-gantt 테마
+public/
+  manifest.webmanifest  설치형 웹앱(PWA) 정보
+  sw.js               오프라인 실행용 서비스 워커
+  favicon.svg, icons/ 탭 아이콘·앱 아이콘
+scripts/
+  make-icons.mjs      앱 아이콘 PNG 생성
 tests/
   backup.test.js      백업 검증 테스트 (npm test)
   zoom-timeline.test.js  줌·타임라인 계산 테스트
@@ -103,6 +120,10 @@ tests/
 `master` 브랜치에 푸시하면 GitHub Actions(`.github/workflows/deploy.yml`)가 테스트와 빌드를 거쳐 GitHub Pages에 자동으로 배포합니다. 진행 상황은 저장소의 Actions 탭에서 볼 수 있습니다.
 
 배포된 사이트와 `localhost`는 브라우저 저장 공간이 따로라서 데이터가 공유되지 않습니다. 옮기려면 한쪽에서 내보내기 한 파일을 다른 쪽에서 불러오세요.
+
+## 앱 아이콘
+
+`public/icons/`의 PNG는 `npm run icons`(scripts/make-icons.mjs)로 만듭니다. 로고 색·배치를 바꾸면 스크립트와 `public/favicon.svg`, `index.html`의 로고를 함께 고친 뒤 다시 실행하세요.
 
 ## 테스트
 
