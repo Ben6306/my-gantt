@@ -16,6 +16,7 @@ import { colorFor, isColorKey } from './colors.js';
 import { DEFAULT_ZOOM, MODE_DEFAULT_ZOOM, ZOOM_LEVELS, fitZoom, spanDays } from './zoom.js';
 import { exportPng } from './exportPng.js';
 import { createHistory } from './history.js';
+import { initListResizer } from './listResizer.js';
 
 const DEFAULT_PROJECT_NAME = 'Untitled project';
 
@@ -674,6 +675,14 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
     // 등록에 실패해도(사생활 보호 모드 등) 앱은 온라인으로 그대로 쓸 수 있다
   });
 }
+
+initListResizer({
+  board: document.querySelector('.board'),
+  handle: document.getElementById('list-resizer'),
+  getNames: () => tasks.map((t) => t.name),
+  // 차트 폭이 바뀌면 가로 스크롤바가 생기거나 사라질 수 있어 목록 아래 여백을 다시 맞춘다
+  onResize: () => fitListSpacer(),
+});
 
 setProjectName(currentProject().name, { save: false });
 // 예전 데이터에서 옮겨 온 경우 새 형식으로 바로 저장해 둔다 (예전 키는 그대로 남는다)

@@ -37,6 +37,7 @@ npm run dev
 - 프로젝트 여러 개: 헤더 이름 옆 ▾ 메뉴에서 전환·삭제, "New project"는 새 빈 프로젝트를 추가 (다른 프로젝트는 그대로)
 - 헤더의 "Export JSON"·"Import JSON" 버튼: JSON 파일로 백업하고 복원 (아래 "백업과 복원" 참고)
 - 실행 취소/다시 실행: ⌘Z / ⇧⌘Z (윈도우 Ctrl+Z / Ctrl+Y), 목록 위 화살표 버튼. 이력은 페이지를 새로고침하면 사라짐
+- 목록 폭 조절: 목록과 차트 사이 경계선을 끌면 태스크 이름 칸이 넓어짐, 더블클릭하면 가장 긴 이름에 맞춤, 포커스 후 ←/→. 폭은 기억됨
 - 목록 순서 바꾸기: 행 왼쪽 손잡이를 끌어서 옮기거나, 행을 선택하고 Alt+↑/↓. 차트 순서도 같이 바뀜
 - 모든 변경은 즉시 localStorage(`my-gantt:projects`, `my-gantt:current-project`)에 저장. 프로젝트 전환 기능 이전에 쓰던 `my-gantt:tasks`·`my-gantt:project-name`은 처음 열 때 첫 프로젝트로 옮기고 지우지 않음
 
@@ -60,6 +61,7 @@ src/
   exportPng.js        PNG를 캔버스에 그려 내려받기
   history.js          실행 취소/다시 실행 이력
   projects.js         여러 프로젝트 상태(예전 데이터 옮기기·삭제)
+  listResizer.js      목록 폭 조절(경계선 끌기·더블클릭 맞춤)
   style.css           레이아웃과 frappe-gantt 테마
 public/
   manifest.webmanifest  설치형 웹앱(PWA) 정보
