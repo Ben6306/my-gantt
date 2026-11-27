@@ -1,6 +1,6 @@
 # 간트 차트
 
-Vite + Vanilla JS + [frappe-gantt](https://github.com/frappe/gantt)로 만든 개인용 간트차트입니다. 백엔드 없이 브라우저에서만 동작하고, 데이터는 localStorage에 자동 저장됩니다.
+Vite + Vanilla JS + [frappe-gantt](https://github.com/frappe/gantt)로 만든 개인용 간트차트입니다. 화면은 영어입니다. 백엔드 없이 브라우저에서만 동작하고, 데이터는 localStorage에 자동 저장됩니다.
 
 **바로 쓰기**: https://ben6306.github.io/my-gantt/
 
@@ -19,10 +19,11 @@ npm run dev
 
 - 왼쪽 태스크 목록: 이름·시작일·종료일·진행률, 행마다 수정/삭제 버튼, 클릭하면 목록과 차트에서 함께 강조
 - 오른쪽 간트 차트: 의존성 화살표, 드래그로 기간·진행률 변경, 일/주/월 보기
-- 태스크 추가/수정 모달: 종료일 ≥ 시작일, 진행률 0~100 정수 검증, 순환 의존 방지
-- 헤더의 "새 프로젝트" 버튼: 확인 후 모든 태스크를 지우고 빈 프로젝트로 시작
-- 헤더의 "내보내기"·"불러오기" 버튼: JSON 파일로 백업하고 복원 (아래 "백업과 복원" 참고)
-- 모든 변경은 즉시 localStorage(`my-gantt:tasks`)에 저장
+- 태스크 추가/수정 모달: 색상 10가지 선택, 종료일 ≥ 시작일, 진행률 0~100 정수 검증, 순환 의존 방지
+- 헤더의 프로젝트 이름: 클릭해서 바로 바꿀 수 있고 자동 저장
+- 헤더의 "New project" 버튼: 확인 후 모든 태스크를 지우고 이름도 초기화
+- 헤더의 "Export"·"Import" 버튼: JSON 파일로 백업하고 복원 (아래 "백업과 복원" 참고)
+- 모든 변경은 즉시 localStorage(`my-gantt:tasks`, `my-gantt:project-name`)에 저장
 
 ## 파일 구조
 
@@ -38,6 +39,7 @@ src/
   storage.js          localStorage 저장/불러오기
   sampleTasks.js      저장된 데이터가 없을 때 쓰는 샘플
   utils.js            날짜·이스케이프·의존성 문자열 헬퍼
+  colors.js           태스크 색상 팔레트(키·이름)
   style.css           레이아웃과 frappe-gantt 테마
 tests/
   backup.test.js      백업 검증 테스트 (npm test)
@@ -46,22 +48,24 @@ tests/
 ## 데이터 형식
 
 ```js
-{ id: "2", name: "요구사항 정리", start: "2026-12-04", end: "2026-12-10", progress: 20, dependencies: "1" }
+{ id: "2", name: "Requirements", start: "2026-12-04", end: "2026-12-10", progress: 20, dependencies: "1", color: "blue" }
 ```
 
 `dependencies`는 선행 태스크 id를 쉼표로 이은 문자열입니다(예: `"1, 3"`, 없으면 `""`).
+
+`color`는 `purple`, `blue`, `sky`, `teal`, `green`, `yellow`, `orange`, `red`, `pink`, `gray` 중 하나입니다. 없거나 모르는 값이면 순서대로 기본 색이 들어갑니다.
 
 ## 백업과 복원
 
 데이터는 쓰는 브라우저 안에만 저장됩니다. 브라우저 데이터를 지우거나 다른 브라우저·컴퓨터로 옮기면 보이지 않으니 가끔 내보내기 해 두세요.
 
-- **내보내기**: `gantt-backup-날짜.json` 파일이 다운로드 폴더에 저장됩니다.
-- **불러오기**: 백업 파일을 고르면 확인 후 지금 태스크를 파일 내용으로 **바꿉니다**(합치지 않습니다).
+- **Export**: `프로젝트이름-날짜.json` 파일이 다운로드 폴더에 저장됩니다. 프로젝트 이름도 함께 들어갑니다.
+- **Import**: 백업 파일을 고르면 확인 후 지금 태스크를 파일 내용으로 **바꿉니다**(합치지 않습니다).
 - 날짜·진행률·id가 잘못된 파일은 불러오지 않고 이유를 알려 줍니다. 없는 태스크를 가리키는 선행 연결은 빼고 불러옵니다.
 - 백업 형식 대신 태스크 배열만 있는 JSON도 불러올 수 있습니다.
 
 ```json
-{ "app": "my-gantt", "version": 1, "exportedAt": "2026-11-28T00:00:00.000Z", "tasks": [ ... ] }
+{ "app": "my-gantt", "version": 1, "exportedAt": "2026-11-28T00:00:00.000Z", "projectName": "Website launch", "tasks": [ ... ] }
 ```
 
 ## 배포

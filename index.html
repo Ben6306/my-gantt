@@ -1,48 +1,67 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>간트 차트</title>
+    <title>Gantt</title>
   </head>
   <body>
     <div class="app">
       <header class="app-header">
-        <h1>프로젝트 일정</h1>
+        <h1>
+          <svg class="logo-mark" viewBox="0 0 20 20" aria-hidden="true">
+            <rect x="2" y="3" width="10" height="4" rx="2" class="c-purple" />
+            <rect x="6" y="8" width="12" height="4" rx="2" class="c-blue" />
+            <rect x="4" y="13" width="8" height="4" rx="2" class="c-green" />
+          </svg>
+          <input
+            id="project-name"
+            class="project-name"
+            type="text"
+            maxlength="60"
+            autocomplete="off"
+            spellcheck="false"
+            aria-label="Project name"
+            title="Click to rename"
+          />
+        </h1>
         <div class="header-actions">
-          <button type="button" id="export-btn" class="btn-ghost" title="모든 태스크를 JSON 파일로 저장">내보내기</button>
-          <button type="button" id="import-btn" class="btn-ghost" title="내보낸 JSON 파일에서 태스크 불러오기">불러오기</button>
+          <button type="button" id="export-btn" class="btn-ghost" title="Save all tasks to a JSON file">Export</button>
+          <button type="button" id="import-btn" class="btn-ghost" title="Load tasks from an exported JSON file">Import</button>
           <input type="file" id="import-file" accept=".json,application/json" hidden />
-          <button type="button" id="reset-btn" class="btn-ghost">새 프로젝트</button>
+          <button type="button" id="reset-btn" class="btn-ghost">New project</button>
         </div>
       </header>
 
       <main class="board">
         <div class="panel-toolbar list-toolbar">
           <span id="task-count" class="task-count"></span>
-          <button type="button" id="add-btn" class="btn-primary">+ 태스크 추가</button>
+          <button type="button" id="add-btn" class="btn-primary">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
+            Add task
+          </button>
         </div>
         <div class="panel-toolbar chart-toolbar">
-          <div class="view-modes" role="group" aria-label="보기 단위">
-            <button type="button" data-mode="Day" class="active">일</button>
-            <button type="button" data-mode="Week">주</button>
-            <button type="button" data-mode="Month">월</button>
+          <div class="view-modes" role="group" aria-label="Zoom">
+            <button type="button" data-mode="Day" class="active">Day</button>
+            <button type="button" data-mode="Week">Week</button>
+            <button type="button" data-mode="Month">Month</button>
           </div>
-          <button type="button" id="today-btn" class="btn-ghost">오늘</button>
+          <button type="button" id="today-btn" class="btn-ghost">Today</button>
         </div>
 
         <div class="board-body">
-          <section class="task-list" aria-label="태스크 목록">
+          <section class="task-list" aria-label="Tasks">
             <div class="list-head">
-              <span>태스크</span>
-              <span>시작일</span>
-              <span>종료일</span>
-              <span>진행률</span>
-              <span class="sr-only">관리</span>
+              <span>Task</span>
+              <span>Start</span>
+              <span>End</span>
+              <span>Progress</span>
+              <span class="sr-only">Actions</span>
             </div>
             <ul id="task-rows"></ul>
           </section>
-          <section class="chart" aria-label="간트 차트">
+          <section class="chart" aria-label="Gantt chart">
             <div id="gantt"></div>
           </section>
         </div>
@@ -51,41 +70,46 @@
 
     <dialog id="task-modal" class="modal">
       <form id="task-form" method="dialog" novalidate>
-        <h2 id="modal-title">태스크 추가</h2>
+        <h2 id="modal-title">Add task</h2>
 
         <label class="field">
-          <span>이름</span>
+          <span>Name</span>
           <input name="name" type="text" required maxlength="60" autocomplete="off" />
         </label>
 
         <div class="field-row">
           <label class="field">
-            <span>시작일</span>
+            <span>Start date</span>
             <input name="start" type="date" required />
           </label>
           <label class="field">
-            <span>종료일</span>
+            <span>End date</span>
             <input name="end" type="date" required />
           </label>
         </div>
 
+        <fieldset class="field">
+          <legend>Color</legend>
+          <div id="color-options" class="color-options"></div>
+        </fieldset>
+
         <label class="field">
-          <span>진행률 (%)</span>
+          <span>Progress (%)</span>
           <input name="progress" type="number" min="0" max="100" step="1" inputmode="numeric" required />
         </label>
 
         <fieldset class="field">
-          <legend>선행 태스크</legend>
+          <legend>Depends on</legend>
           <div id="dependency-options" class="dependency-options"></div>
         </fieldset>
 
         <p id="form-error" class="form-error" role="alert"></p>
 
         <div class="modal-actions">
-          <button type="button" id="delete-btn" class="btn-danger">삭제</button>
+          <button type="button" id="delete-btn" class="btn-danger">Delete</button>
           <span class="spacer"></span>
-          <button type="button" id="cancel-btn" class="btn-ghost">취소</button>
-          <button type="submit" class="btn-primary">저장</button>
+          <button type="button" id="cancel-btn" class="btn-ghost">Cancel</button>
+          <button type="submit" class="btn-primary">Save</button>
         </div>
       </form>
     </dialog>
@@ -96,7 +120,7 @@
         <p id="confirm-message" class="confirm-message"></p>
         <div class="modal-actions">
           <span class="spacer"></span>
-          <button type="submit" value="cancel" class="btn-ghost">취소</button>
+          <button type="submit" value="cancel" class="btn-ghost">Cancel</button>
           <button type="submit" value="ok" id="confirm-ok" class="btn-danger-solid"></button>
         </div>
       </form>

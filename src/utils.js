@@ -8,7 +8,16 @@ export const toISODate = (date) => {
 
 export const addDays = (date, days) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 
-export const formatDate = (iso) => iso.replaceAll('-', '.');
+const dateFormat = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+// "2026-12-01" → "Dec 1, 2026" (UTC로 해석되지 않도록 현지 날짜로 만든다)
+export const formatDate = (iso) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  return dateFormat.format(new Date(y, m - 1, d));
+};
+
+// plural(1, 'task') → "1 task", plural(3, 'task') → "3 tasks"
+export const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 export const escapeHTML = (str) =>
   String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);

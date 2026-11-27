@@ -1,19 +1,20 @@
 // 왼쪽 태스크 목록 패널을 그리는 모듈 (행마다 수정/삭제 버튼, 선택 행 강조)
-import { escapeHTML, formatDate } from './utils.js';
+import { escapeHTML, formatDate, plural } from './utils.js';
 
 const rowsEl = document.getElementById('task-rows');
 const countEl = document.getElementById('task-count');
 
-const editIcon = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.3 2.3a1.4 1.4 0 0 1 2 2L5.6 12l-2.8.7.7-2.8z"/></svg>`;
-const deleteIcon = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg>`;
+// lucide 아이콘(pencil, trash-2), ISC 라이선스
+const editIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>`;
+const deleteIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>`;
 
 export function renderTaskList(tasks, selectedId) {
-  countEl.textContent = `태스크 ${tasks.length}개`;
+  countEl.textContent = plural(tasks.length, 'task');
 
   if (!tasks.length) {
     const li = document.createElement('li');
     li.className = 'empty';
-    li.textContent = '태스크가 없습니다. ‘+ 태스크 추가’로 시작해 보세요.';
+    li.textContent = 'No tasks yet. Click “Add task” to get started.';
     rowsEl.replaceChildren(li);
     return;
   }
@@ -23,8 +24,8 @@ export function renderTaskList(tasks, selectedId) {
       const name = escapeHTML(task.name);
       const selected = task.id === selectedId;
       return `
-        <li class="task-row${selected ? ' is-selected' : ''}" data-id="${escapeHTML(task.id)}" tabindex="0"${selected ? ' aria-current="true"' : ''}>
-          <span class="task-name" title="${name}">${name}</span>
+        <li class="task-row c-${escapeHTML(task.color)}${selected ? ' is-selected' : ''}${task.progress === 100 ? ' is-done' : ''}" data-id="${escapeHTML(task.id)}" tabindex="0"${selected ? ' aria-current="true"' : ''}>
+          <span class="task-name" title="${name}"><span class="color-dot"></span><span class="task-name-text">${name}</span></span>
           <span class="task-date">${formatDate(task.start)}</span>
           <span class="task-date">${formatDate(task.end)}</span>
           <span class="task-progress">
@@ -32,8 +33,8 @@ export function renderTaskList(tasks, selectedId) {
             <span class="progress-value">${task.progress}%</span>
           </span>
           <span class="row-actions">
-            <button type="button" class="icon-btn" data-action="edit" aria-label="${name} 수정" title="수정">${editIcon}</button>
-            <button type="button" class="icon-btn danger" data-action="delete" aria-label="${name} 삭제" title="삭제">${deleteIcon}</button>
+            <button type="button" class="icon-btn" data-action="edit" aria-label="Edit ${name}" title="Edit">${editIcon}</button>
+            <button type="button" class="icon-btn danger" data-action="delete" aria-label="Delete ${name}" title="Delete">${deleteIcon}</button>
           </span>
         </li>`;
     })

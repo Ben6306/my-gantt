@@ -1,32 +1,39 @@
-// 백업 파일 생성·검증 로직(src/backup.js)을 확인하는 테스트
+// 백업 파일 생성·검증 로직(src/backup.js)과 날짜 표시 헬퍼를 확인하는 테스트
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { backupFileName, buildBackup, parseBackup } from '../src/backup.js';
 import { sampleTasks } from '../src/sampleTasks.js';
+import { formatDate, plural } from '../src/utils.js';
 
-const task = (overrides = {}) => ({ id: '1', name: '기획', start: '2026-12-01', end: '2026-12-05', progress: 40, dependencies: '', ...overrides });
+const task = (overrides = {}) => ({ id: '1', name: 'Plan', start: '2026-12-01', end: '2026-12-05', progress: 40, dependencies: '', ...overrides });
 
-test('내보낸 백업을 다시 불러오면 같은 태스크가 나온다', () => {
-  const text = JSON.stringify(buildBackup(sampleTasks, new Date('2026-11-28T00:00:00Z')));
-  const { tasks, droppedDeps } = parseBackup(text);
+test('내보낸 백업을 다시 불러오면 같은 태스크와 프로젝트 이름이 나온다', () => {
+  const text = JSON.stringify(buildBackup({ tasks: sampleTasks, projectName: 'Website launch' }, new Date('2026-11-28T00:00:00Z')));
+  const { tasks, projectName, droppedDeps } = parseBackup(text);
   assert.deepEqual(tasks, sampleTasks);
+  assert.equal(projectName, 'Website launch');
   assert.equal(droppedDeps, 0);
 });
 
-test('백업에는 앱 식별자, 버전, 내보낸 시각이 들어간다', () => {
-  const backup = buildBackup([], new Date('2026-11-28T00:00:00Z'));
+test('백업에는 앱 식별자, 버전, 내보낸 시각, 프로젝트 이름이 들어간다', () => {
+  const backup = buildBackup({ tasks: [], projectName: 'Q1 roadmap' }, new Date('2026-11-28T00:00:00Z'));
   assert.equal(backup.app, 'my-gantt');
   assert.equal(backup.version, 1);
   assert.equal(backup.exportedAt, '2026-11-28T00:00:00.000Z');
+  assert.equal(backup.projectName, 'Q1 roadmap');
 });
 
-test('파일 이름에 날짜가 들어간다', () => {
-  assert.equal(backupFileName(new Date(2026, 10, 28)), 'gantt-backup-2026-11-28.json');
+test('파일 이름은 프로젝트 이름과 날짜로 만들고, 쓸 수 없는 문자는 뺀다', () => {
+  const day = new Date(2026, 10, 28);
+  assert.equal(backupFileName('Website launch', day), 'Website-launch-2026-11-28.json');
+  assert.equal(backupFileName('a/b:c*', day), 'abc-2026-11-28.json');
+  assert.equal(backupFileName('  ', day), 'gantt-2026-11-28.json');
 });
 
-test('태스크 배열만 있는 JSON도 받는다', () => {
-  const { tasks } = parseBackup(JSON.stringify([task()]));
+test('태스크 배열만 있는 JSON도 받고, 이때 프로젝트 이름은 없다', () => {
+  const { tasks, projectName } = parseBackup(JSON.stringify([task()]));
   assert.equal(tasks.length, 1);
+  assert.equal(projectName, null);
 });
 
 test('빈 프로젝트 백업도 받는다', () => {
@@ -49,7 +56,17 @@ test('숫자 id, 배열 의존성, 소수 진행률, 빠진 진행률을 앱 형
 
 test('알 수 없는 필드는 버린다', () => {
   const [t] = parseBackup(JSON.stringify([task({ _start: 'x', custom: 1 })])).tasks;
-  assert.deepEqual(Object.keys(t).sort(), ['dependencies', 'end', 'id', 'name', 'progress', 'start']);
+  assert.deepEqual(Object.keys(t).sort(), ['color', 'dependencies', 'end', 'id', 'name', 'progress', 'start']);
+});
+
+test('올바른 색상은 그대로 두고, 없거나 모르는 색상은 순서대로 기본 색을 준다', () => {
+  const { tasks } = parseBackup(
+    JSON.stringify([task({ color: 'pink' }), task({ id: '2' }), task({ id: '3', color: '#ff0000' })]),
+  );
+  assert.deepEqual(
+    tasks.map((t) => t.color),
+    ['pink', 'blue', 'sky'],
+  );
 });
 
 test('존재하지 않는 선행 태스크와 자기 자신 연결은 빼고 개수를 알려준다', () => {
@@ -60,13 +77,24 @@ test('존재하지 않는 선행 태스크와 자기 자신 연결은 빼고 개
 
 const rejects = (input, pattern) => assert.throws(() => parseBackup(typeof input === 'string' ? input : JSON.stringify(input)), pattern);
 
-test('JSON이 아니면 거부한다', () => rejects('not json', /JSON 파일을 읽을 수 없습니다/));
-test('태스크 목록이 없으면 거부한다', () => rejects({ foo: 1 }, /태스크 목록을 찾을 수 없습니다/));
-test('id가 없으면 거부한다', () => rejects([task({ id: '' })], /1번째 태스크에 id가 없습니다/));
-test('이름이 없으면 거부한다', () => rejects([task(), task({ id: '2', name: '  ' })], /2번째 태스크에 이름이 없습니다/));
-test('날짜 형식이 틀리면 거부한다', () => rejects([task({ start: '2026/12/01' })], /시작일이 올바른 날짜/));
-test('없는 날짜는 거부한다', () => rejects([task({ end: '2026-02-30' })], /종료일이 올바른 날짜/));
-test('종료일이 시작일보다 빠르면 거부한다', () => rejects([task({ end: '2026-11-30' })], /종료일이 시작일보다 빠릅니다/));
-test('진행률이 범위를 벗어나면 거부한다', () => rejects([task({ progress: 120 })], /진행률이 0~100/));
-test('진행률이 숫자가 아니면 거부한다', () => rejects([task({ progress: 'abc' })], /진행률이 0~100/));
-test('중복 id는 거부한다', () => rejects([task(), task()], /id ‘1’가 두 번 이상/));
+test('JSON이 아니면 거부한다', () => rejects('not json', /isn’t valid JSON/));
+test('태스크 목록이 없으면 거부한다', () => rejects({ foo: 1 }, /No task list found/));
+test('id가 없으면 거부한다', () => rejects([task({ id: '' })], /The 1st task has no id/));
+test('이름이 없으면 거부한다', () => rejects([task(), task({ id: '2', name: '  ' })], /The 2nd task has no name/));
+test('날짜 형식이 틀리면 거부한다', () => rejects([task({ start: '2026/12/01' })], /invalid start date/));
+test('없는 날짜는 거부한다', () => rejects([task({ end: '2026-02-30' })], /invalid end date/));
+test('종료일이 시작일보다 빠르면 거부한다', () => rejects([task({ end: '2026-11-30' })], /ends before it starts/));
+test('진행률이 범위를 벗어나면 거부한다', () => rejects([task({ progress: 120 })], /progress value outside 0–100/));
+test('진행률이 숫자가 아니면 거부한다', () => rejects([task({ progress: 'abc' })], /progress value outside 0–100/));
+test('중복 id는 거부한다', () => rejects([task(), task()], /“1” is used more than once/));
+
+test('날짜는 영어 약식으로 보여준다', () => {
+  assert.equal(formatDate('2026-12-01'), 'Dec 1, 2026');
+  assert.equal(formatDate('2027-01-31'), 'Jan 31, 2027');
+});
+
+test('개수 표시는 단수/복수를 맞춘다', () => {
+  assert.equal(plural(1, 'task'), '1 task');
+  assert.equal(plural(0, 'task'), '0 tasks');
+  assert.equal(plural(5, 'day'), '5 days');
+});

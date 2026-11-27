@@ -1,27 +1,46 @@
 // 앱 진입점: 태스크 상태를 들고 왼쪽 목록·frappe-gantt 차트·모달을 서로 연결
 import Gantt from 'frappe-gantt';
+// 동료 PC(윈도우 등)에서도 같은 글꼴로 보이도록 Pretendard를 함께 배포한다. 쓰는 글자 조각만 내려받는다.
+import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
 import './style.css';
 import { sampleTasks } from './sampleTasks.js';
-import { loadTasks, saveTasks } from './storage.js';
+import { loadProjectName, loadTasks, saveProjectName, saveTasks } from './storage.js';
 import { renderTaskList } from './taskList.js';
 import { openTaskModal } from './taskModal.js';
 import { confirmDialog } from './confirmDialog.js';
 import { backupFileName, buildBackup, parseBackup } from './backup.js';
 import { showToast } from './toast.js';
-import { addDays, escapeHTML, formatDate, joinDeps, parseDeps, toISODate } from './utils.js';
+import { addDays, escapeHTML, formatDate, joinDeps, parseDeps, plural, toISODate } from './utils.js';
+import { colorFor, isColorKey } from './colors.js';
 
-// 이전 버전은 dependencies를 배열로 저장했으므로 문자열 형식으로 맞춘다
-const normalize = (list) => list.map((t) => ({ ...t, dependencies: joinDeps(parseDeps(t.dependencies)) }));
+const DEFAULT_PROJECT_NAME = 'Untitled project';
+
+// 이전 버전 데이터 맞추기: dependencies 배열 → 문자열, 색상이 없으면 순서대로 기본 색
+const normalize = (list) =>
+  list.map((t, i) => ({
+    ...t,
+    dependencies: joinDeps(parseDeps(t.dependencies)),
+    color: isColorKey(t.color) ? t.color : colorFor(i),
+  }));
 
 let tasks = normalize(loadTasks() ?? sampleTasks);
 let selectedId = null;
+let projectName = '';
 
 const rowsEl = document.getElementById('task-rows');
+const projectNameInput = document.getElementById('project-name');
 
 const nextId = () => String(Math.max(0, ...tasks.map((t) => Number(t.id)).filter(Number.isFinite)) + 1);
 
-// frappe-gantt는 넘겨받은 객체를 직접 수정하므로 복사본을 넘긴다
-const chartTasks = () => tasks.map((t) => ({ ...t, dependencies: parseDeps(t.dependencies) }));
+// 막대 색은 custom_class(.c-<색>)로 style.css에서 입힌다
+const chartTasks = () => tasks.map((t) => ({ ...t, dependencies: parseDeps(t.dependencies), custom_class: `c-${t.color}` }));
+
+function setProjectName(name, { save = true } = {}) {
+  projectName = name.trim() || DEFAULT_PROJECT_NAME;
+  projectNameInput.value = projectName;
+  document.title = `${projectName} · Gantt`;
+  if (save) saveProjectName(projectName);
+}
 
 // 선택된 태스크의 차트 행과 막대를 강조한다. 차트를 다시 그리면 클래스가 사라지므로 렌더링마다 호출한다.
 function highlightChart(chart = gantt) {
@@ -38,6 +57,42 @@ function scrollChartTo(id) {
   gantt.$container.scrollTo({ left: Math.max(0, Number(bar.getAttribute('x')) - 80), behavior: 'smooth' });
 }
 
+/*
+ * 차트를 다시 그려도 보던 위치를 지키기 위해 왼쪽 끝의 '날짜'를 기억한다.
+ * frappe-gantt는 스크롤할 때 시작 날짜를 앞으로 계속 늘리고(infinite_padding), refresh하면 원래 범위로 되돌린다.
+ * 그래서 픽셀 위치를 그대로 되돌리면 엉뚱한 날짜(몇 달 뒤)로 가 버린다.
+ */
+function captureScrollDate() {
+  const { column_width } = gantt.config;
+  const left = gantt.$container.scrollLeft;
+  const index = Math.min(Math.floor(left / column_width), gantt.dates.length - 1);
+  return { time: gantt.dates[index].getTime(), offset: left - index * column_width };
+}
+
+function restoreScrollDate({ time, offset }) {
+  // 주 단위 보기는 칸 시작일이 달라질 수 있어 가장 가까운 칸을 찾는다
+  let nearest = 0;
+  gantt.dates.forEach((d, i) => {
+    if (Math.abs(d.getTime() - time) < Math.abs(gantt.dates[nearest].getTime() - time)) nearest = i;
+  });
+  gantt.$container.scrollLeft = nearest * gantt.config.column_width + offset;
+}
+
+// 상태를 바꾸는 유일한 경로: 저장 → 목록 갱신 → (필요하면) 차트 다시 그리기
+function commit(next, { redraw = true } = {}) {
+  tasks = next;
+  saveTasks(tasks);
+  renderTaskList(tasks, selectedId);
+  if (redraw) {
+    const scrollDate = captureScrollDate();
+    gantt.refresh(chartTasks());
+    restoreScrollDate(scrollDate);
+    // 같은 위치로 되돌리면 scroll 이벤트가 안 나서 상단 월 표시(current-upper)가 비므로 직접 발생시킨다
+    gantt.$container.dispatchEvent(new Event('scroll'));
+  }
+  highlightChart();
+}
+
 function selectTask(id, { scrollChart = false } = {}) {
   selectedId = id;
   rowsEl.querySelectorAll('.task-row').forEach((row) => {
@@ -47,22 +102,6 @@ function selectTask(id, { scrollChart = false } = {}) {
   });
   highlightChart();
   if (scrollChart) scrollChartTo(id);
-}
-
-// 상태를 바꾸는 유일한 경로: 저장 → 목록 갱신 → (필요하면) 차트 다시 그리기
-function commit(next, { redraw = true } = {}) {
-  tasks = next;
-  saveTasks(tasks);
-  renderTaskList(tasks, selectedId);
-  if (redraw) {
-    // refresh는 스크롤을 처음 위치로 되돌리므로 보던 위치를 유지한다
-    const { scrollLeft } = gantt.$container;
-    gantt.refresh(chartTasks());
-    gantt.$container.scrollLeft = scrollLeft;
-    // 같은 위치로 되돌리면 scroll 이벤트가 안 나서 상단 월 표시(current-upper)가 비므로 직접 발생시킨다
-    gantt.$container.dispatchEvent(new Event('scroll'));
-  }
-  highlightChart();
 }
 
 function updateTask(id, changes, options) {
@@ -76,9 +115,9 @@ async function requestDelete(id) {
   const task = tasks.find((t) => t.id === id);
   if (!task) return false;
   const ok = await confirmDialog({
-    title: '태스크 삭제',
-    message: `‘${task.name}’ 태스크를 삭제할까요? 삭제하면 되돌릴 수 없습니다.`,
-    confirmText: '삭제',
+    title: 'Delete task',
+    message: `Delete “${task.name}”? This can’t be undone.`,
+    confirmText: 'Delete',
   });
   if (!ok) return false;
 
@@ -93,26 +132,30 @@ async function requestDelete(id) {
 
 async function resetProject() {
   const ok = await confirmDialog({
-    title: '새 프로젝트',
+    title: 'New project',
     message: tasks.length
-      ? `현재 태스크 ${tasks.length}개를 모두 지우고 빈 프로젝트로 시작할까요? 되돌릴 수 없습니다.`
-      : '이미 빈 프로젝트입니다. 그래도 초기화할까요?',
-    confirmText: '모두 지우기',
+      ? `Delete all ${plural(tasks.length, 'task')} in “${projectName}” and start an empty project? This can’t be undone.`
+      : 'This project is already empty. Reset it anyway?',
+    confirmText: tasks.length ? 'Delete all' : 'Reset',
   });
   if (!ok) return;
   selectedId = null;
   commit([]);
+  setProjectName(DEFAULT_PROJECT_NAME);
+  // 바로 새 이름을 입력할 수 있게 한다
+  projectNameInput.focus();
+  projectNameInput.select();
 }
 
 function exportBackup() {
-  const blob = new Blob([JSON.stringify(buildBackup(tasks), null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify(buildBackup({ tasks, projectName }), null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = backupFileName();
+  a.download = backupFileName(projectName);
   a.click();
   setTimeout(() => URL.revokeObjectURL(url));
-  showToast(`태스크 ${tasks.length}개를 ${a.download} 파일로 내보냈습니다.`);
+  showToast(`Exported ${plural(tasks.length, 'task')} to ${a.download}.`);
 }
 
 async function importBackup(file) {
@@ -120,31 +163,39 @@ async function importBackup(file) {
   try {
     result = parseBackup(await file.text());
   } catch (err) {
-    showToast(`불러오지 못했습니다. ${err.message}`, { type: 'error' });
+    showToast(`Couldn’t import the file. ${err.message}`, { type: 'error' });
     return;
   }
 
   // 지금 태스크가 없으면 잃을 것이 없으므로 묻지 않는다
   if (tasks.length) {
     const ok = await confirmDialog({
-      title: '백업 불러오기',
-      message: `현재 태스크 ${tasks.length}개를 ‘${file.name}’의 태스크 ${result.tasks.length}개로 바꿀까요? 지금 데이터가 필요하면 먼저 내보내기 해 두세요.`,
-      confirmText: '불러오기',
+      title: 'Import backup',
+      message: `Replace the ${plural(tasks.length, 'task')} in “${projectName}” with ${plural(result.tasks.length, 'task')} from “${file.name}”? Export first if you need the current data.`,
+      confirmText: 'Import',
     });
     if (!ok) return;
   }
 
   selectedId = null;
   commit(result.tasks);
+  if (result.projectName) setProjectName(result.projectName);
   gantt.set_scroll_position('start');
-  const dropped = result.droppedDeps ? ` 없는 선행 태스크를 가리키던 연결 ${result.droppedDeps}개는 뺐습니다.` : '';
-  showToast(`태스크 ${result.tasks.length}개를 불러왔습니다.${dropped}`);
+  const dropped = result.droppedDeps ? ` Removed ${plural(result.droppedDeps, 'link')} to missing tasks.` : '';
+  showToast(`Imported ${plural(result.tasks.length, 'task')}.${dropped}`);
 }
 
 function openAdd() {
   const today = new Date();
   openTaskModal({
-    task: { name: '', start: toISODate(today), end: toISODate(addDays(today, 4)), progress: 0, dependencies: '' },
+    task: {
+      name: '',
+      start: toISODate(today),
+      end: toISODate(addDays(today, 4)),
+      progress: 0,
+      dependencies: '',
+      color: colorFor(tasks.length),
+    },
     isNew: true,
     tasks,
     onSave: (data) => {
@@ -165,19 +216,24 @@ function openEdit(id) {
     task,
     isNew: false,
     tasks,
-    onSave: (data) => updateTask(id, data),
+    onSave: (data) => {
+      updateTask(id, data);
+      // 날짜를 바꿨을 수 있으므로 저장한 태스크가 보이는 곳으로 이동한다
+      scrollChartTo(id);
+    },
     onDelete: () => requestDelete(id),
   });
 }
 
 const gantt = new Gantt('#gantt', chartTasks(), {
-  language: 'ko',
+  language: 'en',
   view_mode: 'Day',
-  bar_height: 30,
-  padding: 18,
-  upper_header_height: 45,
+  // 행 높이 = bar_height + padding = 40, 헤더 높이 = 36 + 30 + 10 = 76 (style.css의 --row-h, --head-h와 맞춘다)
+  bar_height: 24,
+  padding: 16,
+  upper_header_height: 36,
   lower_header_height: 30,
-  bar_corner_radius: 6,
+  bar_corner_radius: 4,
   scroll_to: 'start',
   today_button: false,
   view_mode_select: false,
@@ -187,7 +243,7 @@ const gantt = new Gantt('#gantt', chartTasks(), {
     ctx.set_subtitle('');
     const start = formatDate(toISODate(task._start));
     const end = formatDate(toISODate(new Date(task._end.getTime() - 1000)));
-    ctx.set_details(`${start} ~ ${end} (${task.actual_duration}일)<br/>진행률 ${Math.round(task.progress)}%`);
+    ctx.set_details(`${start} – ${end} (${plural(task.actual_duration, 'day')})<br/>Progress ${Math.round(task.progress)}%`);
   },
   on_view_change() {
     // 라이브러리가 정하는 컨테이너 높이는 가로 스크롤바 두께만큼 모자라 세로 스크롤이 생기므로 보정한다
@@ -226,6 +282,16 @@ importInput.addEventListener('change', () => {
   if (file) importBackup(file);
 });
 
+// 프로젝트 이름: 입력을 마치면(포커스가 빠지면) 저장, Enter로 확정, Esc로 취소
+projectNameInput.addEventListener('change', () => setProjectName(projectNameInput.value));
+projectNameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') projectNameInput.blur();
+  if (e.key === 'Escape') {
+    projectNameInput.value = projectName;
+    projectNameInput.blur();
+  }
+});
+
 rowsEl.addEventListener('click', (e) => {
   const row = e.target.closest('.task-row');
   if (!row) return;
@@ -243,4 +309,5 @@ rowsEl.addEventListener('keydown', (e) => {
   }
 });
 
+setProjectName(loadProjectName() ?? DEFAULT_PROJECT_NAME, { save: false });
 renderTaskList(tasks, selectedId);
