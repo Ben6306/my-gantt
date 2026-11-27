@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>간트 차트</title>
+  </head>
+  <body>
+    <header class="app-header">
+      <h1>프로젝트 일정</h1>
+      <div class="toolbar">
+        <div class="view-modes" role="group" aria-label="보기 단위">
+          <button type="button" data-mode="Day" class="active">일</button>
+          <button type="button" data-mode="Week">주</button>
+          <button type="button" data-mode="Month">월</button>
+        </div>
+        <button type="button" id="today-btn" class="btn-ghost">오늘</button>
+      </div>
+    </header>
+
+    <main class="board">
+      <section class="task-list" aria-label="태스크 목록">
+        <div class="list-head">
+          <span>태스크</span>
+          <span>시작일</span>
+          <span>종료일</span>
+          <span>진행률</span>
+        </div>
+        <ul id="task-rows"></ul>
+      </section>
+      <section class="chart" aria-label="간트 차트">
+        <div id="gantt"></div>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

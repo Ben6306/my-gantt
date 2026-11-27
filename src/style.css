@@ -1,0 +1,205 @@
+/* 앱 레이아웃과 frappe-gantt 테마를 덮어쓰는 스타일 */
+/* 패키지 exports에 CSS 하위 경로가 없어서 파일 경로로 직접 불러온다 */
+@import '../node_modules/frappe-gantt/dist/frappe-gantt.css';
+
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --border: #e4e7ec;
+  --text: #1d2433;
+  --text-muted: #6b7385;
+  --accent: #2f6fed;
+  --accent-soft: #dce7fd;
+
+  /* frappe-gantt 행 높이(bar_height + padding)·헤더 높이(45 + 30 + 10)와 맞춘다 */
+  --row-h: 48px;
+  --head-h: 85px;
+
+  --g-bar-color: var(--accent-soft);
+  --g-bar-border: var(--accent-soft);
+  --g-progress-color: var(--accent);
+  --g-arrow-color: #9aa3b5;
+  --g-border-color: var(--border);
+  --g-row-border-color: var(--border);
+  --g-tick-color: #f1f3f6;
+  --g-tick-color-thick: #e4e7ec;
+  --g-text-dark: var(--text);
+  --g-text-muted: var(--text-muted);
+  --g-today-highlight: var(--accent);
+  --g-weekend-highlight-color: #f8f9fb;
+  --g-handle-color: var(--text);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+}
+
+.view-modes {
+  display: flex;
+  padding: 3px;
+  background: #eceef2;
+  border-radius: 8px;
+}
+
+.view-modes button {
+  border: 0;
+  background: none;
+  padding: 6px 14px;
+  border-radius: 6px;
+  color: var(--text-muted);
+}
+
+.view-modes button.active {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(16 24 40 / 0.08);
+}
+
+.btn-ghost {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  padding: 6px 14px;
+  border-radius: 8px;
+}
+
+.btn-ghost:hover {
+  border-color: #cfd4dc;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: 460px minmax(0, 1fr);
+  margin: 0 24px 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* 왼쪽 태스크 목록 */
+.task-list {
+  border-right: 1px solid var(--border);
+}
+
+.list-head,
+.task-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px 88px 96px;
+  gap: 12px;
+  align-items: center;
+  padding: 0 16px;
+}
+
+.list-head {
+  height: var(--head-h);
+  align-items: end;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+#task-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.task-row {
+  height: var(--row-h);
+  border-bottom: 1px solid var(--border);
+}
+
+.task-row:hover {
+  background: #f8f9fb;
+}
+
+.task-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.task-date {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.task-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.progress-track {
+  flex: 1;
+  height: 6px;
+  background: #eceef2;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.progress-value {
+  width: 34px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 오른쪽 간트 차트 */
+.chart {
+  min-width: 0;
+}
+
+.chart .gantt-container {
+  border-radius: 0;
+}
+
+.chart .gantt .bar-label {
+  fill: var(--text);
+  font-weight: 500;
+}
