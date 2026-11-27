@@ -4,7 +4,8 @@ import Gantt from 'frappe-gantt';
 import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
 import './style.css';
 import { sampleTasks } from './sampleTasks.js';
-import { loadProjectName, loadTasks, saveProjectName, saveTasks } from './storage.js';
+import { loadLegacyProject, loadProjectsState, saveProjectsState } from './storage.js';
+import { createProject, initState, removeProject } from './projects.js';
 import { renderTaskList } from './taskList.js';
 import { openTaskModal } from './taskModal.js';
 import { confirmDialog } from './confirmDialog.js';
@@ -26,7 +27,20 @@ const normalize = (list) =>
     color: isColorKey(t.color) ? t.color : colorFor(i),
   }));
 
-let tasks = normalize(loadTasks() ?? sampleTasks);
+// 저장된 프로젝트 목록을 읽는다. 처음이면 예전 단일 프로젝트 데이터(설치한 앱의 기존 태스크)를 첫 프로젝트로 옮긴다
+const legacy = loadLegacyProject();
+const initial = initState({
+  stored: loadProjectsState(),
+  legacyTasks: legacy.tasks,
+  legacyName: legacy.name,
+  fallbackTasks: sampleTasks,
+  defaultName: DEFAULT_PROJECT_NAME,
+});
+// 프로젝트 목록. 지금 프로젝트의 태스크·이름은 아래 tasks·projectName에서 고치고 persist()로 목록에 되돌려 쓴다
+let projects = initial.projects.map((p) => ({ ...p, tasks: normalize(p.tasks) }));
+let currentId = initial.currentId;
+const currentProject = () => projects.find((p) => p.id === currentId);
+let tasks = currentProject().tasks;
 let selectedId = null;
 let projectName = '';
 let zoomIndex = DEFAULT_ZOOM;
@@ -50,11 +64,24 @@ function record(label) {
     if (gestureRecorded) return;
     gestureRecorded = true;
   }
-  history.record({ tasks, projectName }, label);
+  history.record(snapshot(), label);
   recordingBatch = true;
   setTimeout(() => {
     recordingBatch = false;
   });
+}
+
+// 지금 프로젝트의 작업 사본(tasks·projectName)을 목록에 반영한 전체 상태 (이력·저장용)
+function snapshot() {
+  return {
+    projects: projects.map((p) => (p.id === currentId ? { ...p, name: projectName, tasks } : p)),
+    currentId,
+  };
+}
+
+function persist() {
+  projects = snapshot().projects;
+  saveProjectsState({ projects, currentId });
 }
 
 const rowsEl = document.getElementById('task-rows');
@@ -74,8 +101,9 @@ function setProjectName(name, { save = true, label } = {}) {
   projectName = next;
   projectNameInput.value = projectName;
   document.title = `${projectName} · Gantt`;
-  if (save) saveProjectName(projectName);
+  if (save) persist();
   updateHistoryControls();
+  renderProjectMenu();
 }
 
 // 선택된 태스크의 차트 행과 막대를 강조한다. 차트를 다시 그리면 클래스가 사라지므로 렌더링마다 호출한다.
@@ -167,17 +195,105 @@ function fitToScreen() {
 function commit(next, { redraw = true, label } = {}) {
   if (label) record(label);
   tasks = next;
-  saveTasks(tasks);
+  persist();
   renderTaskList(tasks, selectedId);
-  if (redraw) {
-    const time = timeAtView(0);
-    gantt.refresh(chartTasks());
-    scrollTimeTo(time, 0);
-    // 같은 위치로 되돌리면 scroll 이벤트가 안 나서 상단 월 표시(current-upper)가 비므로 직접 발생시킨다
-    gantt.$container.dispatchEvent(new Event('scroll'));
-  }
+  if (redraw) redrawChart({ keepScroll: true });
   highlightChart();
   updateHistoryControls();
+  renderProjectMenu();
+}
+
+// keepScroll: 보던 날짜 유지(같은 프로젝트를 고친 경우). 아니면 다른 프로젝트라서 일정 시작·맨 위로
+function redrawChart({ keepScroll }) {
+  const time = timeAtView(0);
+  gantt.refresh(chartTasks());
+  if (keepScroll) {
+    scrollTimeTo(time, 0);
+  } else {
+    if (tasks.length) gantt.set_scroll_position('start');
+    gantt.$container.scrollTop = 0;
+  }
+  // 같은 위치로 되돌리면 scroll 이벤트가 안 나서 상단 월 표시(current-upper)가 비므로 직접 발생시킨다
+  gantt.$container.dispatchEvent(new Event('scroll'));
+}
+
+// 지금 프로젝트(currentId)를 화면에 그린다
+function showProject({ keepScroll = false } = {}) {
+  tasks = currentProject().tasks;
+  if (selectedId && !tasks.some((t) => t.id === selectedId)) selectedId = null;
+  setProjectName(currentProject().name, { save: false });
+  renderTaskList(tasks, selectedId);
+  redrawChart({ keepScroll });
+  highlightChart();
+  updateHistoryControls();
+}
+
+// 프로젝트 목록·지금 프로젝트를 바꾸고 저장한 뒤 화면을 다시 그린다 (이력 기록은 부르는 쪽에서)
+function setProjects(next, nextCurrentId) {
+  const sameProject = nextCurrentId === currentId;
+  projects = next;
+  currentId = nextCurrentId;
+  if (!sameProject) selectedId = null;
+  saveProjectsState({ projects, currentId });
+  showProject({ keepScroll: sameProject });
+}
+
+function switchProject(id) {
+  if (id !== currentId) setProjects(projects, id);
+}
+
+function newProject() {
+  record('New project');
+  const project = createProject(DEFAULT_PROJECT_NAME);
+  setProjects([...projects, project], project.id);
+  // 바로 새 이름을 입력할 수 있게 한다
+  projectNameInput.focus();
+  projectNameInput.select();
+}
+
+async function requestDeleteProject() {
+  const ok = await confirmDialog({
+    title: 'Delete project',
+    message: `Delete “${projectName}” and its ${plural(tasks.length, 'task')}? You can undo this with ${UNDO_KEY}.`,
+    confirmText: 'Delete project',
+  });
+  if (!ok) return;
+  record(`Delete project “${projectName}”`);
+  const next = removeProject({ projects, currentId }, currentId, DEFAULT_PROJECT_NAME);
+  setProjects(next.projects, next.currentId);
+}
+
+const projectMenu = document.getElementById('project-menu');
+const projectMenuBtn = document.getElementById('project-menu-btn');
+
+function renderProjectMenu() {
+  const list = document.getElementById('project-list');
+  list.replaceChildren(
+    ...projects.map((p) => {
+      const isCurrent = p.id === currentId;
+      // 지금 프로젝트는 고치는 중인 이름·태스크 수를 보여 준다
+      const name = isCurrent ? projectName : p.name;
+      const count = isCurrent ? tasks.length : p.tasks.length;
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `project-item${isCurrent ? ' is-current' : ''}`;
+      btn.dataset.id = p.id;
+      if (isCurrent) btn.setAttribute('aria-current', 'true');
+      const nameEl = document.createElement('span');
+      nameEl.className = 'project-item-name';
+      nameEl.textContent = name;
+      nameEl.title = name;
+      const countEl = document.createElement('span');
+      countEl.className = 'project-item-count';
+      countEl.textContent = String(count);
+      btn.append(nameEl, countEl);
+      li.append(btn);
+      return li;
+    }),
+  );
+  document.getElementById('delete-project-btn').textContent =
+    projects.length > 1 ? 'Delete this project' : 'Delete this project (clears it)';
 }
 
 function updateHistoryControls() {
@@ -189,21 +305,20 @@ function updateHistoryControls() {
   redoBtn.title = history.canRedo ? `Redo ${history.redoLabel} (${REDO_KEY})` : `Redo (${REDO_KEY})`;
 }
 
+// 이력의 상태로 되돌린다. 다른 프로젝트에서 일어난 변경이면 그 프로젝트로 옮겨 가 보여 준다
 function applySnapshot(state) {
-  if (selectedId && !state.tasks.some((t) => t.id === selectedId)) selectedId = null;
-  commit(state.tasks);
-  setProjectName(state.projectName);
+  setProjects(state.projects, state.currentId);
 }
 
 function undo() {
-  const entry = history.undo({ tasks, projectName });
+  const entry = history.undo(snapshot());
   if (!entry) return;
   applySnapshot(entry.state);
   showToast(`Undid: ${entry.label}`);
 }
 
 function redo() {
-  const entry = history.redo({ tasks, projectName });
+  const entry = history.redo(snapshot());
   if (!entry) return;
   applySnapshot(entry.state);
   showToast(`Redid: ${entry.label}`);
@@ -247,23 +362,6 @@ async function requestDelete(id) {
   return true;
 }
 
-async function resetProject() {
-  const ok = await confirmDialog({
-    title: 'New project',
-    message: tasks.length
-      ? `Delete all ${plural(tasks.length, 'task')} in “${projectName}” and start an empty project? You can undo this with ${UNDO_KEY}.`
-      : 'This project is already empty. Reset it anyway?',
-    confirmText: tasks.length ? 'Delete all' : 'Reset',
-  });
-  if (!ok) return;
-  selectedId = null;
-  commit([], { label: 'New project' });
-  setProjectName(DEFAULT_PROJECT_NAME);
-  // 바로 새 이름을 입력할 수 있게 한다
-  projectNameInput.focus();
-  projectNameInput.select();
-}
-
 async function exportImage(button) {
   if (!tasks.length) {
     showToast('Add a task before exporting an image.');
@@ -301,22 +399,13 @@ async function importBackup(file) {
     return;
   }
 
-  // 지금 태스크가 없으면 잃을 것이 없으므로 묻지 않는다
-  if (tasks.length) {
-    const ok = await confirmDialog({
-      title: 'Import backup',
-      message: `Replace the ${plural(tasks.length, 'task')} in “${projectName}” with ${plural(result.tasks.length, 'task')} from “${file.name}”? You can undo this with ${UNDO_KEY}.`,
-      confirmText: 'Import',
-    });
-    if (!ok) return;
-  }
-
-  selectedId = null;
-  commit(result.tasks, { label: 'Import JSON' });
-  if (result.projectName) setProjectName(result.projectName);
-  gantt.set_scroll_position('start');
+  // 지금 프로젝트를 덮어쓰지 않고 새 프로젝트로 추가한다 (잃는 것이 없으므로 묻지 않는다)
+  const name = result.projectName ?? file.name.replace(/\.json$/i, '');
+  record(`Import “${name}”`);
+  const project = createProject(name, result.tasks);
+  setProjects([...projects, project], project.id);
   const dropped = result.droppedDeps ? ` Removed ${plural(result.droppedDeps, 'link')} to missing tasks.` : '';
-  showToast(`Imported ${plural(result.tasks.length, 'task')}.${dropped}`);
+  showToast(`Imported “${name}” as a new project with ${plural(result.tasks.length, 'task')}.${dropped}`);
 }
 
 function openAdd() {
@@ -405,7 +494,32 @@ document.getElementById('fit-btn').addEventListener('click', fitToScreen);
 document.getElementById('today-btn').addEventListener('click', () => gantt.scroll_current());
 document.getElementById('png-btn').addEventListener('click', (e) => exportImage(e.currentTarget));
 document.getElementById('add-btn').addEventListener('click', openAdd);
-document.getElementById('reset-btn').addEventListener('click', resetProject);
+document.getElementById('new-project-btn').addEventListener('click', newProject);
+
+// 프로젝트 메뉴(popover): 버튼 아래에 붙여 연다. Esc·바깥 클릭으로 닫히는 것은 브라우저가 해 준다
+projectMenu.addEventListener('toggle', (e) => {
+  const open = e.newState === 'open';
+  projectMenuBtn.setAttribute('aria-expanded', String(open));
+  if (open) {
+    const r = projectMenuBtn.getBoundingClientRect();
+    projectMenu.style.top = `${r.bottom + 6}px`;
+    projectMenu.style.left = `${Math.max(8, r.left - 8)}px`;
+    projectMenu.querySelector('.is-current')?.focus();
+  }
+});
+projectMenu.addEventListener('click', (e) => {
+  const item = e.target.closest('.project-item');
+  if (item) {
+    projectMenu.hidePopover();
+    switchProject(item.dataset.id);
+  } else if (e.target.closest('#menu-new-project-btn')) {
+    projectMenu.hidePopover();
+    newProject();
+  } else if (e.target.closest('#delete-project-btn')) {
+    projectMenu.hidePopover();
+    requestDeleteProject();
+  }
+});
 document.getElementById('export-btn').addEventListener('click', exportBackup);
 
 const importInput = document.getElementById('import-file');
@@ -561,6 +675,8 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
   });
 }
 
-setProjectName(loadProjectName() ?? DEFAULT_PROJECT_NAME, { save: false });
+setProjectName(currentProject().name, { save: false });
+// 예전 데이터에서 옮겨 온 경우 새 형식으로 바로 저장해 둔다 (예전 키는 그대로 남는다)
+saveProjectsState({ projects, currentId });
 renderTaskList(tasks, selectedId);
 updateZoomControls();

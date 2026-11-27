@@ -29,13 +29,33 @@
             aria-label="Project name"
             title="Click to rename"
           />
+          <button
+            type="button"
+            id="project-menu-btn"
+            class="icon-btn"
+            popovertarget="project-menu"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            aria-label="Switch project"
+            title="Switch project"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+          </button>
         </h1>
+        <div id="project-menu" class="project-menu" popover>
+          <p class="project-menu-label">Projects</p>
+          <ul id="project-list" class="project-list"></ul>
+          <div class="project-menu-actions">
+            <button type="button" id="menu-new-project-btn" class="menu-action">New project</button>
+            <button type="button" id="delete-project-btn" class="menu-action danger">Delete this project</button>
+          </div>
+        </div>
         <div class="header-actions">
           <button type="button" id="png-btn" class="btn-ghost" title="Save the whole schedule as an image, at the current zoom">Export PNG</button>
           <button type="button" id="export-btn" class="btn-ghost" title="Save all tasks to a JSON backup file">Export JSON</button>
           <button type="button" id="import-btn" class="btn-ghost" title="Load tasks from a JSON backup file">Import JSON</button>
           <input type="file" id="import-file" accept=".json,application/json" hidden />
-          <button type="button" id="reset-btn" class="btn-ghost">New project</button>
+          <button type="button" id="new-project-btn" class="btn-ghost" title="Start a new empty project (your other projects stay)">New project</button>
         </div>
       </header>
 

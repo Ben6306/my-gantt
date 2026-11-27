@@ -917,3 +917,94 @@ button {
   background: #2a1517;
   color: #ffd0d1;
 }
+
+/* 프로젝트 전환 메뉴 (popover: 열면 맨 위 층에 뜨고 Esc·바깥 클릭으로 닫힌다. 위치는 main.js가 버튼 아래로 잡는다) */
+.project-menu {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: 320px;
+  max-height: min(420px, calc(100vh - 80px));
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.5);
+}
+
+.project-menu-label {
+  margin: 4px 8px 6px;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.project-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-item,
+.menu-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  transition: background-color 120ms var(--ease);
+}
+
+.project-item:hover,
+.menu-action:hover {
+  background: var(--raised-hover);
+}
+
+.project-item.is-current {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.project-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.project-item-count {
+  color: var(--text-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.project-menu-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--hairline);
+}
+
+.menu-action {
+  color: var(--text-2);
+}
+
+.menu-action.danger {
+  color: var(--danger);
+}
+
+.menu-action.danger:hover {
+  background: var(--danger-soft);
+}
