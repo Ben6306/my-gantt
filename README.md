@@ -2,6 +2,8 @@
 
 Vite + Vanilla JS + [frappe-gantt](https://github.com/frappe/gantt)로 만든 개인용 간트차트입니다. 백엔드 없이 브라우저에서만 동작하고, 데이터는 localStorage에 자동 저장됩니다.
 
+**바로 쓰기**: https://ben6306.github.io/my-gantt/
+
 ## 실행
 
 ```bash
@@ -61,6 +63,12 @@ tests/
 ```json
 { "app": "my-gantt", "version": 1, "exportedAt": "2026-11-28T00:00:00.000Z", "tasks": [ ... ] }
 ```
+
+## 배포
+
+`master` 브랜치에 푸시하면 GitHub Actions(`.github/workflows/deploy.yml`)가 테스트와 빌드를 거쳐 GitHub Pages에 자동으로 배포합니다. 진행 상황은 저장소의 Actions 탭에서 볼 수 있습니다.
+
+배포된 사이트와 `localhost`는 브라우저 저장 공간이 따로라서 데이터가 공유되지 않습니다. 옮기려면 한쪽에서 내보내기 한 파일을 다른 쪽에서 불러오세요.
 
 ## 테스트
 

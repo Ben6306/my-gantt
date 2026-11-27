@@ -38,3 +38,10 @@
 - [x] 성공/실패 안내 토스트
 - [x] 빌드·테스트(18개) 통과
 - [x] 브라우저 확인 (사용자가 직접 확인)
+
+## 5단계 — 배포 (GitHub Pages)
+- [x] Vite `base: './'` (하위 경로 /my-gantt/ 대응)
+- [x] Actions 워크플로: master 푸시 → 테스트 → 빌드 → Pages 배포
+- [x] 공개 저장소 Ben6306/my-gantt 생성, Pages(build_type=workflow) 활성화
+- [x] 첫 배포 성공, 페이지와 자산 200 확인
+- [x] README에 주소와 배포 방식
