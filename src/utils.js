@@ -27,6 +27,14 @@ export const fileStem = (name) =>
     .replace(/\s+/g, '-')
     .slice(0, 40) || 'gantt';
 
+// from 자리의 항목을 꺼내 결과 배열의 to 자리에 놓은 새 배열 (원본은 그대로)
+export const moveItem = (list, from, to) => {
+  const next = [...list];
+  const [item] = next.splice(from, 1);
+  next.splice(Math.min(Math.max(to, 0), next.length), 0, item);
+  return next;
+};
+
 // plural(1, 'task') → "1 task", plural(3, 'task') → "3 tasks"
 export const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 

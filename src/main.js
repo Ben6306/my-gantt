@@ -10,7 +10,7 @@ import { openTaskModal } from './taskModal.js';
 import { confirmDialog } from './confirmDialog.js';
 import { backupFileName, buildBackup, parseBackup } from './backup.js';
 import { showToast } from './toast.js';
-import { addDays, escapeHTML, formatDate, joinDeps, parseDeps, parseISODate, plural, toISODate } from './utils.js';
+import { addDays, escapeHTML, formatDate, joinDeps, moveItem, parseDeps, parseISODate, plural, toISODate } from './utils.js';
 import { colorFor, isColorKey } from './colors.js';
 import { DEFAULT_ZOOM, MODE_DEFAULT_ZOOM, ZOOM_LEVELS, fitZoom, spanDays } from './zoom.js';
 import { exportPng } from './exportPng.js';
@@ -452,12 +452,81 @@ rowsEl.addEventListener('click', (e) => {
   else selectTask(row.dataset.id, { scrollChart: true });
 });
 
+// 태스크를 목록의 to 자리로 옮긴다 (차트 순서도 같이 바뀐다)
+function reorderTask(id, to) {
+  const from = tasks.findIndex((t) => t.id === id);
+  if (from === -1 || to === from || to < 0 || to >= tasks.length) return false;
+  commit(moveItem(tasks, from, to), { label: `Reorder “${tasks[from].name}”` });
+  return true;
+}
+
 rowsEl.addEventListener('keydown', (e) => {
   if (!e.target.classList.contains('task-row')) return;
+  const { id } = e.target.dataset;
   if (e.key === 'Enter' || e.key === ' ') {
     e.preventDefault();
-    selectTask(e.target.dataset.id, { scrollChart: true });
+    selectTask(id, { scrollChart: true });
+  } else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    // Alt+↑/↓: 한 칸 옮기고, 다시 그려진 같은 행에 포커스를 돌려준다
+    e.preventDefault();
+    const index = tasks.findIndex((t) => t.id === id);
+    selectedId = id;
+    if (reorderTask(id, index + (e.key === 'ArrowUp' ? -1 : 1))) {
+      rowsEl.querySelector(`.task-row[data-id="${CSS.escape(id)}"]`)?.focus();
+    }
   }
+});
+
+// 손잡이를 끌어 순서 바꾸기 (HTML 드래그 앤 드롭)
+let draggingId = null;
+let dropIndex = null;
+
+const clearDropMarks = () =>
+  rowsEl.querySelectorAll('.drop-before, .drop-after').forEach((r) => r.classList.remove('drop-before', 'drop-after'));
+
+rowsEl.addEventListener('dragstart', (e) => {
+  const row = e.target.closest('.task-row');
+  if (!row || !e.target.closest('.drag-handle')) return;
+  draggingId = row.dataset.id;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', draggingId);
+  // 손잡이가 아니라 행 전체가 따라오게 한다
+  e.dataTransfer.setDragImage(row, 16, row.offsetHeight / 2);
+  row.classList.add('is-dragging');
+});
+
+rowsEl.addEventListener('dragover', (e) => {
+  const row = e.target.closest('.task-row');
+  if (!draggingId || !row) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const rect = row.getBoundingClientRect();
+  const before = e.clientY < rect.top + rect.height / 2;
+  clearDropMarks();
+  row.classList.add(before ? 'drop-before' : 'drop-after');
+  const index = tasks.findIndex((t) => t.id === row.dataset.id);
+  dropIndex = before ? index : index + 1;
+});
+
+rowsEl.addEventListener('drop', (e) => {
+  if (!draggingId || dropIndex === null) return;
+  e.preventDefault();
+  const from = tasks.findIndex((t) => t.id === draggingId);
+  // 자기 자리보다 아래에 놓으면, 꺼낸 만큼 한 칸 당겨진다
+  const to = dropIndex > from ? dropIndex - 1 : dropIndex;
+  const id = draggingId;
+  // 목록을 다시 그리면 끌던 행이 사라져 dragend가 목록까지 오지 않으므로 여기서 정리한다
+  draggingId = null;
+  dropIndex = null;
+  clearDropMarks();
+  reorderTask(id, to);
+});
+
+rowsEl.addEventListener('dragend', () => {
+  draggingId = null;
+  dropIndex = null;
+  clearDropMarks();
+  rowsEl.querySelector('.is-dragging')?.classList.remove('is-dragging');
 });
 
 setProjectName(loadProjectName() ?? DEFAULT_PROJECT_NAME, { save: false });

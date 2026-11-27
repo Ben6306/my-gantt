@@ -1,7 +1,8 @@
-// 실행 취소 이력(src/history.js)을 확인하는 테스트
+// 실행 취소 이력(src/history.js)과 목록 순서 이동(moveItem)을 확인하는 테스트
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHistory } from '../src/history.js';
+import { moveItem } from '../src/utils.js';
 
 test('되돌리면 바뀌기 전 상태와 무엇을 했는지가 나온다', () => {
   const h = createHistory();
@@ -60,4 +61,13 @@ test('이력은 정해진 개수까지만 남는다', () => {
   assert.equal(h.undo(3).label, 'c');
   assert.equal(h.undo(2).label, 'b');
   assert.equal(h.undo(1), null);
+});
+
+test('항목을 앞뒤로 옮기고 원본은 그대로 둔다', () => {
+  const list = ['a', 'b', 'c', 'd'];
+  assert.deepEqual(moveItem(list, 0, 2), ['b', 'c', 'a', 'd']);
+  assert.deepEqual(moveItem(list, 3, 0), ['d', 'a', 'b', 'c']);
+  assert.deepEqual(moveItem(list, 1, 1), list);
+  assert.deepEqual(moveItem(list, 1, 99), ['a', 'c', 'd', 'b']);
+  assert.deepEqual(list, ['a', 'b', 'c', 'd']);
 });
