@@ -223,17 +223,17 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
-/* 목록과 차트가 함께 세로 스크롤되어 행이 항상 맞는다 */
+/*
+ * 세로 스크롤은 차트 컨테이너가 맡는다. 그래야 frappe의 날짜 헤더(position: sticky)가 위에 고정된다.
+ * 목록은 자체 스크롤(스크롤바 숨김)을 차트와 맞춰 움직이고, 열 이름 행은 sticky로 고정한다. (main.js 스크롤 동기화)
+ */
 .board-body {
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: var(--list-w) minmax(0, 1fr);
-  align-items: start;
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
-  overflow-y: auto;
-  /* 내용이 짧아도 좌우 구분선이 바닥까지 이어지게 한다 */
-  background: linear-gradient(var(--hairline), var(--hairline)) no-repeat calc(var(--list-w) - 1px) 0 / 1px 100%;
-  background-attachment: local;
+  overflow: hidden;
 }
 
 /* 버튼 */
@@ -429,7 +429,24 @@ button {
   padding: 0 8px 0 16px;
 }
 
+.task-list {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  border-right: 1px solid var(--hairline);
+  /* 차트가 목록보다 긴 만큼(아래 여백 + 가로 스크롤바) 채워 맨 아래에서도 행이 맞게 한다 */
+  padding-bottom: var(--list-spacer, 0px);
+}
+
+.task-list::-webkit-scrollbar {
+  display: none;
+}
+
 .list-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg);
   height: var(--head-h);
   align-items: end;
   padding-bottom: 8px;
@@ -593,9 +610,17 @@ button {
 /* 오른쪽 간트 차트 */
 .chart {
   min-width: 0;
+  min-height: 0;
+}
+
+/* frappe는 .gantt-container를 #gantt 안에 만든다. #gantt에 높이가 없으면 아래 100%가 내용 높이(헤더뿐)로 풀린다 */
+.chart #gantt {
+  height: 100%;
 }
 
 .chart .gantt-container {
+  /* frappe가 넣는 고정 높이(내용 높이) 대신 남은 화면 높이를 채우고 안에서 스크롤한다 */
+  height: 100% !important;
   border-radius: 0;
   font-family: inherit;
 }

@@ -58,6 +58,7 @@ function record(label) {
 }
 
 const rowsEl = document.getElementById('task-rows');
+const listEl = document.querySelector('.task-list');
 const projectNameInput = document.getElementById('project-name');
 
 const nextId = () => String(Math.max(0, ...tasks.map((t) => Number(t.id)).filter(Number.isFinite)) + 1);
@@ -86,10 +87,26 @@ function highlightChart(chart = gantt) {
   chart.$svg.querySelector(`.bar-wrapper[data-id="${CSS.escape(selectedId)}"]`)?.classList.add('is-selected');
 }
 
+// 막대가 보이게 가로로 옮기고, 세로로는 날짜 헤더에 가리거나 화면 아래로 벗어난 경우에만 옮긴다
 function scrollChartTo(id) {
   const bar = gantt.$svg.querySelector(`.bar-wrapper[data-id="${CSS.escape(id)}"] .bar`);
   if (!bar) return;
-  gantt.$container.scrollTo({ left: Math.max(0, Number(bar.getAttribute('x')) - 80), behavior: 'smooth' });
+  const el = gantt.$container;
+  const y = Number(bar.getAttribute('y'));
+  const barH = gantt.options.bar_height;
+  const pad = gantt.options.padding;
+  let top = el.scrollTop;
+  if (y - pad < top + gantt.config.header_height) top = y - pad - gantt.config.header_height;
+  else if (y + barH + pad > top + el.clientHeight) top = y + barH + pad - el.clientHeight;
+  el.scrollTo({ left: Math.max(0, Number(bar.getAttribute('x')) - 80), top: Math.max(0, top), behavior: 'smooth' });
+}
+
+// 차트는 목록보다 조금 길다(frappe 아래 여백 + 가로 스크롤바). 그만큼 목록 아래를 채워 맨 아래까지 내려도 행이 맞게 한다
+function fitListSpacer(chart = gantt) {
+  const el = chart.$container;
+  const rowsHeight = chart.config.header_height + (chart.options.bar_height + chart.options.padding) * chart.tasks.length;
+  const extra = chart.grid_height - rowsHeight + (el.offsetHeight - el.clientHeight);
+  listEl.style.setProperty('--list-spacer', `${Math.max(0, extra)}px`);
 }
 
 /*
@@ -365,9 +382,7 @@ const gantt = new Gantt('#gantt', chartTasks(), {
     ctx.set_details(`${start} – ${end} (${plural(task.actual_duration, 'day')})<br/>Progress ${Math.round(task.progress)}%`);
   },
   on_view_change() {
-    // 라이브러리가 정하는 컨테이너 높이는 가로 스크롤바 두께만큼 모자라 세로 스크롤이 생기므로 보정한다
-    const el = this.$container;
-    el.style.height = `${this.grid_height + (el.offsetHeight - el.clientHeight)}px`;
+    fitListSpacer(this);
     highlightChart(this);
   },
   on_click: (task) => selectTask(task.id),
@@ -414,6 +429,16 @@ gantt.$container.addEventListener(
 document.addEventListener('mouseup', () => {
   pointerDownOnChart = false;
 });
+
+// 목록과 차트의 세로 스크롤을 맞춘다. 같은 값이면 scroll 이벤트가 다시 나지 않아 서로 무한히 부르지 않는다
+gantt.$container.addEventListener('scroll', () => {
+  if (listEl.scrollTop !== gantt.$container.scrollTop) listEl.scrollTop = gantt.$container.scrollTop;
+});
+listEl.addEventListener('scroll', () => {
+  if (gantt.$container.scrollTop !== listEl.scrollTop) gantt.$container.scrollTop = listEl.scrollTop;
+});
+// 창 크기가 바뀌면 가로 스크롤바가 생기거나 사라질 수 있다
+window.addEventListener('resize', () => fitListSpacer());
 
 document.getElementById('undo-btn').addEventListener('click', undo);
 document.getElementById('redo-btn').addEventListener('click', redo);
