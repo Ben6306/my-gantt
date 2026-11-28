@@ -51,6 +51,10 @@
           </div>
         </div>
         <div class="header-actions">
+          <button type="button" id="backup-status" class="backup-status">
+            <span class="backup-dot" aria-hidden="true"></span>
+            <span id="backup-status-text"></span>
+          </button>
           <button type="button" id="png-btn" class="btn-ghost" title="Save the whole schedule as an image, at the current zoom">Export PNG</button>
           <button type="button" id="export-btn" class="btn-ghost" title="Save all tasks to a JSON backup file">Export JSON</button>
           <button type="button" id="import-btn" class="btn-ghost" title="Load tasks from a JSON backup file">Import JSON</button>
@@ -71,6 +75,10 @@
             <p class="project-menu-label">Baseline</p>
             <button type="button" id="baseline-set-btn" class="menu-action">Save current dates as baseline</button>
             <button type="button" id="baseline-clear-btn" class="menu-action">Clear baseline</button>
+            <p class="project-menu-label">Backup</p>
+            <button type="button" id="export-all-btn" class="menu-action">Export all projects (JSON)</button>
+            <button type="button" id="autosave-btn" class="menu-action">Auto-save to a file…</button>
+            <button type="button" id="autosave-stop-btn" class="menu-action">Stop auto-saving</button>
           </div>
           <button type="button" id="new-project-btn" class="btn-ghost" title="Start a new empty project (your other projects stay)">New project</button>
         </div>

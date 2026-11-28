@@ -172,3 +172,13 @@ Vite + Vanilla JS + frappe-gantt로 간트차트 웹앱을 만든다. 요청에 
 - **그리기**: 막대 바로 아래(막대 아래 2px, 높이 4px) 회색 막대. x는 막대 위치 + (기준선 날짜 − 지금 날짜)의 거리로 계산해, 날짜가 같으면 막대와 정확히 겹친다. 월 보기에서 frappe의 월 차이 계산(일/31)과 우리 시각 비율 계산이 조금 달라도 '안 밀린 태스크'는 어긋나지 않는다. 기준선은 막대 층 아래에 두고 꾸미기 때마다 새로 그린다.
 - **팝업**: "Baseline Nov 23 – Nov 27 · finishes 3 days late". 목록에는 넣지 않았다(칸이 좁음).
 - **PNG**: 기준선이 지금 일정 밖에 있어도 잘리지 않게 이미지 기간에 포함.
+
+## 22단계 — 자동 백업
+- **왜**: 실데이터가 설치 앱의 localStorage에만 있다. 브라우저 데이터 정리·프로필 문제 한 번이면 전부 사라진다.
+- **세 겹**: (1) `navigator.storage.persist()` — 저장 공간이 부족해도 브라우저가 먼저 지우지 않게(설치한 앱은 대개 바로 허락). (2) 파일 자동 저장 — More → Backup → "Auto-save to a file…"로 JSON 파일을 한 번 고르면 바뀔 때마다(1초 묶음) 모든 프로젝트를 그 파일에 쓴다. iCloud Drive 폴더에 두면 다른 기기에도 남는다. (3) 헤더 상태 표시 — 자동 저장 중이면 초록 "Auto-saved 3:04 PM", 아니면 "Backed up 2 days ago", 7일 넘었거나 한 번도 없으면 주황.
+- **파일 핸들 보관**: localStorage에는 못 넣어서 IndexedDB(`my-gantt` / `kv` / `autosave-handle`). 다시 열면 `queryPermission`이 'prompt'일 수 있다(Chrome이 "매번 허용"을 고르지 않은 경우). 그때는 "Auto-save paused"를 보여 주고, 눌러야(사용자 동작 안에서만 `requestPermission` 가능) 다시 켠다.
+- **Safari**: File System Access API가 없어 자동 저장 메뉴를 숨긴다. 상태 표시와 "Export all projects"는 된다.
+- **전체 백업 형식(version 2)**: `{ app, version: 2, exportedAt, projects: [{ name, tasks }] }`. 프로젝트 id는 넣지 않는다(불러오면 새 프로젝트가 되므로). Import JSON은 한 프로젝트·전체·태스크 배열을 모두 받는다 — 전체 백업을 불러오면 모든 프로젝트가 새 프로젝트로 추가된다(지금 것을 덮어쓰지 않음, ⌘Z 한 번에 되돌림).
+- **"마지막 백업"**: Export JSON(한 프로젝트)도 백업으로 친다. 프로젝트가 여럿이면 엄밀하지 않지만, 경고가 너무 자주 뜨지 않는 쪽을 골랐다. 툴팁에 정확한 시각.
+- **헤더 폭**: 상태 표시와 More 버튼이 늘어 1,200px 창에서 긴 프로젝트 이름과 겹칠 수 있어, 이름 칸이 줄어들게(flex-shrink, 최소 160px) 바꿨다.
+- **확인 방법**: 파일 선택 창은 시스템 대화상자라 자동화가 못 연다. 대신 OPFS(`navigator.storage.getDirectory()`)의 파일 핸들을 IndexedDB에 넣고 새로고침해 켜짐·쓰기·갱신을 확인했다.

@@ -4,12 +4,13 @@ import Gantt from 'frappe-gantt';
 import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
 import './style.css';
 import { sampleTasks } from './sampleTasks.js';
-import { loadLegacyProject, loadProjectsState, saveProjectsState } from './storage.js';
+import { loadLastBackup, loadLegacyProject, loadProjectsState, saveLastBackup, saveProjectsState } from './storage.js';
 import { createProject, initState, removeProject } from './projects.js';
 import { renderTaskList } from './taskList.js';
 import { openTaskModal } from './taskModal.js';
 import { confirmDialog } from './confirmDialog.js';
-import { backupFileName, buildBackup, parseBackup } from './backup.js';
+import { allBackupFileName, backupFileName, buildAllBackup, buildBackup, parseAnyBackup } from './backup.js';
+import { autosaveSupported, createAutosave } from './autosave.js';
 import { showToast } from './toast.js';
 import { addDays, escapeHTML, formatDate, joinDeps, parseDeps, parseISODate, plural, toISODate } from './utils.js';
 import { TASK_COLORS, colorFor, isColorKey } from './colors.js';
@@ -93,10 +94,25 @@ function snapshot() {
   };
 }
 
+// 브라우저 저장 공간에 쓰고, 파일 자동 저장이 켜져 있으면 잠시 뒤 파일에도 쓴다
+function saveState() {
+  saveProjectsState({ projects, currentId });
+  autosave.schedule();
+}
+
 function persist() {
   projects = snapshot().projects;
-  saveProjectsState({ projects, currentId });
+  saveState();
 }
+
+// 파일 자동 저장. 내용은 모든 프로젝트(지금 고치는 중인 것 포함)
+const autosave = createAutosave({
+  getData: () => buildAllBackup(snapshot()),
+  onChange: (state) => {
+    if (state.lastSaved) saveLastBackup(state.lastSaved);
+    renderBackupStatus();
+  },
+});
 
 const rowsEl = document.getElementById('task-rows');
 const listEl = document.querySelector('.task-list');
@@ -363,7 +379,7 @@ function setProjects(next, nextCurrentId) {
   projects = next;
   currentId = nextCurrentId;
   if (!sameProject) selectedId = null;
-  saveProjectsState({ projects, currentId });
+  saveState();
   showProject({ keepScroll: sameProject });
 }
 
@@ -523,33 +539,60 @@ async function exportImage(button) {
   }
 }
 
-function exportBackup() {
-  const blob = new Blob([JSON.stringify(buildBackup({ tasks, projectName }), null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
+function download(content, fileName, type) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
   const a = document.createElement('a');
   a.href = url;
-  a.download = backupFileName(projectName);
+  a.download = fileName;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url));
-  showToast(`Exported ${plural(tasks.length, 'task')} to ${a.download}.`);
+}
+
+function markBackedUp() {
+  saveLastBackup(new Date());
+  renderBackupStatus();
+}
+
+function exportBackup() {
+  const fileName = backupFileName(projectName);
+  download(JSON.stringify(buildBackup({ tasks, projectName }), null, 2), fileName, 'application/json');
+  markBackedUp();
+  showToast(`Exported ${plural(tasks.length, 'task')} to ${fileName}.`);
+}
+
+function exportAllBackup() {
+  const fileName = allBackupFileName();
+  download(JSON.stringify(buildAllBackup(snapshot()), null, 2), fileName, 'application/json');
+  markBackedUp();
+  showToast(`Exported ${plural(projects.length, 'project')} to ${fileName}.`);
+}
+
+// 불러온 프로젝트들을 새 프로젝트로 추가하고 첫 번째로 전환한다 (지금 프로젝트를 덮어쓰지 않아 묻지 않는다)
+function addImportedProjects(imported, droppedDeps) {
+  const added = imported.map((p) => createProject(p.name, normalizeTasks(p.tasks)));
+  record(added.length === 1 ? `Import “${added[0].name}”` : `Import ${plural(added.length, 'project')}`);
+  setProjects([...projects, ...added], added[0].id);
+  const dropped = droppedDeps ? ` Removed ${plural(droppedDeps, 'link')} to missing tasks.` : '';
+  const what =
+    added.length === 1
+      ? `“${added[0].name}” as a new project with ${plural(added[0].tasks.length, 'task')}`
+      : `${plural(added.length, 'project')} as new projects`;
+  showToast(`Imported ${what}.${dropped}`);
 }
 
 async function importBackup(file) {
   let result;
   try {
-    result = parseBackup(await file.text());
+    result = parseAnyBackup(await file.text());
   } catch (err) {
     showToast(`Couldn’t import the file. ${err.message}`, { type: 'error' });
     return;
   }
-
-  // 지금 프로젝트를 덮어쓰지 않고 새 프로젝트로 추가한다 (잃는 것이 없으므로 묻지 않는다)
-  const name = result.projectName ?? file.name.replace(/\.json$/i, '');
-  record(`Import “${name}”`);
-  const project = createProject(name, normalizeTasks(result.tasks));
-  setProjects([...projects, project], project.id);
-  const dropped = result.droppedDeps ? ` Removed ${plural(result.droppedDeps, 'link')} to missing tasks.` : '';
-  showToast(`Imported “${name}” as a new project with ${plural(result.tasks.length, 'task')}.${dropped}`);
+  const fallbackName = file.name.replace(/\.json$/i, '');
+  addImportedProjects(
+    result.projects.map((p) => ({ ...p, name: p.name ?? fallbackName })),
+    result.droppedDeps,
+  );
 }
 
 // 선택한 행이 그룹(또는 그룹의 자식)이면 새 태스크를 그 그룹에 넣는다
@@ -715,6 +758,12 @@ moreMenu.addEventListener('toggle', (e) => {
   moreBtn.setAttribute('aria-expanded', String(open));
   if (open) {
     document.getElementById('baseline-clear-btn').disabled = !hasBaseline(tasks);
+    // 자동 저장은 Chrome·Edge만 된다. 켜져 있으면 "다른 파일로", 꺼져 있으면 멈추기 단추를 숨긴다
+    const { status } = autosave.state;
+    const autosaveBtn = document.getElementById('autosave-btn');
+    autosaveBtn.hidden = !autosaveSupported;
+    autosaveBtn.textContent = status === 'off' ? 'Auto-save to a file…' : 'Auto-save to a different file…';
+    document.getElementById('autosave-stop-btn').hidden = !autosaveSupported || status === 'off';
     const r = moreBtn.getBoundingClientRect();
     moreMenu.style.top = `${r.bottom + 6}px`;
     moreMenu.style.left = `${Math.max(8, r.right - moreMenu.offsetWidth)}px`;
@@ -742,6 +791,22 @@ async function saveBaseline() {
 }
 
 document.getElementById('baseline-set-btn').addEventListener('click', saveBaseline);
+
+// 백업: 모든 프로젝트 내보내기, 파일 자동 저장
+document.getElementById('export-all-btn').addEventListener('click', exportAllBackup);
+document.getElementById('autosave-btn').addEventListener('click', async () => {
+  try {
+    if (await autosave.choose('my-gantt-autosave.json')) {
+      showToast(`Auto-saving all projects to “${autosave.state.fileName}”. Keep the file somewhere safe, like iCloud Drive.`);
+    }
+  } catch (err) {
+    showToast(`Couldn’t turn on auto-save. ${err.message}`, { type: 'error' });
+  }
+});
+document.getElementById('autosave-stop-btn').addEventListener('click', async () => {
+  await autosave.stop();
+  showToast('Stopped auto-saving. The file stays where it is.');
+});
 document.getElementById('baseline-clear-btn').addEventListener('click', () => {
   commit(clearBaseline(tasks), { label: 'Clear baseline' });
   showToast(`Cleared the baseline. You can undo this with ${UNDO_KEY}.`);
@@ -946,6 +1011,61 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
   });
 }
 
+// 헤더 백업 상태: 자동 저장 중이면 마지막 저장 시각, 아니면 마지막으로 JSON을 내보낸 지 얼마나 됐는지
+const backupStatusBtn = document.getElementById('backup-status');
+const relativeTime = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+const timeFormat = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' });
+const STALE_DAYS = 7;
+
+function ago(date) {
+  const minutes = Math.round((Date.now() - date) / 60000);
+  if (minutes < 60) return minutes < 1 ? 'just now' : relativeTime.format(-minutes, 'minute');
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return relativeTime.format(-hours, 'hour');
+  return relativeTime.format(-Math.round(hours / 24), 'day');
+}
+
+function renderBackupStatus() {
+  const { status, fileName, lastSaved, error } = autosave.state;
+  const last = loadLastBackup();
+  let text;
+  let tone = '';
+  let title;
+  if (status === 'on') {
+    tone = 'good';
+    text = lastSaved ? `Auto-saved ${timeFormat.format(lastSaved)}` : 'Auto-save on';
+    title = `Every change is saved to “${fileName}”.`;
+  } else if (status === 'paused') {
+    tone = 'warn';
+    text = 'Auto-save paused';
+    title = `Click to allow saving to “${fileName}” again.`;
+  } else if (status === 'error') {
+    tone = 'bad';
+    text = 'Auto-save failed';
+    title = `${error ?? ''} Click to try again, or choose a new file under More.`.trim();
+  } else {
+    const hasTasks = projects.some((p) => (p.id === currentId ? tasks : p.tasks).length);
+    const stale = !last || Date.now() - last > STALE_DAYS * 86400000;
+    tone = stale && hasTasks ? 'warn' : '';
+    text = last ? `Backed up ${ago(last)}` : 'Not backed up';
+    title = `Your tasks live only in this browser. Export a JSON backup or turn on auto-save under More.${last ? ` Last backup: ${last.toLocaleString()}.` : ''}`;
+  }
+  backupStatusBtn.dataset.tone = tone;
+  backupStatusBtn.title = title;
+  document.getElementById('backup-status-text').textContent = text;
+}
+
+backupStatusBtn.addEventListener('click', async () => {
+  const { status } = autosave.state;
+  if (status === 'paused' || status === 'error') {
+    if (!(await autosave.resume())) showToast('Auto-save is still off. Choose a file again under More → Backup.', { type: 'error' });
+    return;
+  }
+  moreMenu.showPopover();
+});
+// "3 minutes ago" 같은 표시를 새로 고친다
+setInterval(renderBackupStatus, 60000);
+
 // 검색·필터 UI
 const searchInput = document.getElementById('search-input');
 const filterBtn = document.getElementById('filter-btn');
@@ -1037,5 +1157,9 @@ document.getElementById('fit-names-btn').addEventListener('click', () => listRes
 setProjectName(currentProject().name, { save: false });
 // 예전 데이터에서 옮겨 온 경우 새 형식으로 바로 저장해 둔다 (예전 키는 그대로 남는다)
 saveProjectsState({ projects, currentId });
+renderBackupStatus();
+autosave.init();
+// 저장 공간이 부족할 때 브라우저가 이 사이트 데이터를 먼저 지우지 않게 요청한다 (설치한 앱은 대개 바로 허락된다)
+navigator.storage?.persist?.().catch(() => {});
 renderList();
 updateZoomControls();

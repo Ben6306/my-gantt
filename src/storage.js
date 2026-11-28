@@ -2,6 +2,7 @@
 const PROJECTS_KEY = 'my-gantt:projects';
 const CURRENT_KEY = 'my-gantt:current-project';
 const LIST_WIDTH_KEY = 'my-gantt:list-width';
+const LAST_BACKUP_KEY = 'my-gantt:last-backup';
 // 프로젝트 전환 이전(한 프로젝트만 저장하던 때)의 키. 읽어서 첫 프로젝트로 옮기기만 하고, 지우지 않는다(만일을 위한 백업)
 const LEGACY_TASKS_KEY = 'my-gantt:tasks';
 const LEGACY_NAME_KEY = 'my-gantt:project-name';
@@ -42,3 +43,11 @@ export function loadLegacyProject() {
 export const loadListWidth = () => read(LIST_WIDTH_KEY, Number);
 
 export const saveListWidth = (width) => write(LIST_WIDTH_KEY, String(width));
+
+// 마지막으로 JSON을 내보내거나 자동 저장한 시각 (헤더 백업 상태 표시용). 없으면 null
+export const loadLastBackup = () => {
+  const value = read(LAST_BACKUP_KEY, (v) => new Date(v));
+  return value && !Number.isNaN(value.getTime()) ? value : null;
+};
+
+export const saveLastBackup = (date) => write(LAST_BACKUP_KEY, date.toISOString());

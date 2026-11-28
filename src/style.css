@@ -151,6 +151,9 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* 헤더 버튼이 늘어나도 겹치지 않게, 좁으면 프로젝트 이름 칸이 줄어든다(최소 160px) */
+  flex: 0 1 auto;
+  min-width: 0;
   margin: 0;
   font-size: 15px;
   font-weight: 600;
@@ -167,6 +170,8 @@ button {
 
 /* 평소엔 제목처럼 보이고, 마우스를 올리거나 클릭하면 입력칸임을 드러낸다 */
 .project-name {
+  flex: 0 1 auto;
+  min-width: 0;
   width: 320px;
   max-width: min(640px, 50vw);
   height: 32px;
@@ -194,6 +199,7 @@ button {
 
 .header-actions {
   display: flex;
+  flex: none;
   gap: 8px;
 }
 
@@ -1491,6 +1497,53 @@ button.group-toggle:hover {
 
 .more-menu {
   width: 280px;
+}
+
+/* 헤더 백업 상태: 자동 저장 중(초록) / 멈춤·오래됨(주황) / 실패(빨강) / 최근 백업(회색) */
+.backup-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.backup-status:hover {
+  background: var(--raised);
+  color: var(--text-2);
+}
+
+.backup-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+
+.backup-status[data-tone='good'] .backup-dot {
+  background: var(--positive);
+}
+
+.backup-status[data-tone='warn'] {
+  color: var(--warning);
+}
+
+.backup-status[data-tone='warn'] .backup-dot {
+  background: var(--warning);
+}
+
+.backup-status[data-tone='bad'] {
+  color: var(--danger);
+}
+
+.backup-status[data-tone='bad'] .backup-dot {
+  background: var(--danger);
 }
 
 .more-menu .project-menu-label:not(:first-child) {

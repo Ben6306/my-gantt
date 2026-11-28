@@ -1,7 +1,7 @@
 // 백업 파일 생성·검증 로직(src/backup.js)과 날짜 표시 헬퍼를 확인하는 테스트
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { backupFileName, buildBackup, parseBackup } from '../src/backup.js';
+import { allBackupFileName, backupFileName, buildAllBackup, buildBackup, parseAnyBackup, parseBackup } from '../src/backup.js';
 import { sampleTasks } from '../src/sampleTasks.js';
 import { formatDate, plural } from '../src/utils.js';
 
@@ -97,4 +97,32 @@ test('개수 표시는 단수/복수를 맞춘다', () => {
   assert.equal(plural(1, 'task'), '1 task');
   assert.equal(plural(0, 'task'), '0 tasks');
   assert.equal(plural(5, 'day'), '5 days');
+});
+
+test('모든 프로젝트 백업(version 2)을 만들고 다시 읽는다', () => {
+  const projects = [
+    { id: 'p1', name: 'A', tasks: [task()] },
+    { id: 'p2', name: 'B', tasks: [] },
+  ];
+  const backup = buildAllBackup({ projects }, new Date('2026-11-28T00:00:00Z'));
+  assert.equal(backup.version, 2);
+  assert.deepEqual(backup.projects.map((p) => p.name), ['A', 'B']);
+  assert.equal('id' in backup.projects[0], false); // 불러오면 새 프로젝트가 되므로 id는 넣지 않는다
+  const { projects: read } = parseAnyBackup(JSON.stringify(backup));
+  assert.deepEqual(read.map((p) => [p.name, p.tasks.length]), [['A', 1], ['B', 0]]);
+  assert.equal(allBackupFileName(new Date(2026, 10, 28)), 'my-gantt-all-projects-2026-11-28.json');
+});
+
+test('한 프로젝트 백업과 태스크 배열도 프로젝트 하나로 읽는다', () => {
+  const one = parseAnyBackup(JSON.stringify(buildBackup({ tasks: [task()], projectName: 'Solo' })));
+  assert.deepEqual(one.projects.map((p) => p.name), ['Solo']);
+  assert.equal(parseAnyBackup(JSON.stringify([task()])).projects[0].name, null);
+});
+
+test('전체 백업 안의 잘못된 프로젝트는 이름을 붙여 알려 준다', () => {
+  assert.throws(
+    () => parseAnyBackup(JSON.stringify({ projects: [{ name: 'Bad', tasks: [task({ end: '2026-11-30' })] }] })),
+    /In “Bad”: .*ends before it starts/,
+  );
+  assert.throws(() => parseAnyBackup(JSON.stringify({ projects: [] })), /no projects/);
 });

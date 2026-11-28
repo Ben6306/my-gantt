@@ -190,10 +190,11 @@
 - [x] PNG에도 기준선
 
 ### 22단계 — 자동 백업 (추천 1)
-- [ ] `navigator.storage.persist()` 요청
-- [ ] 전체 프로젝트 백업 형식(version 2) 만들기·불러오기 + 테스트, More 메뉴 "Export all projects"
-- [ ] 파일에 자동 저장(File System Access API, Chrome): 파일 선택 → IndexedDB에 핸들 보관 → 바뀔 때마다 저장, 권한이 풀리면 "다시 켜기"
-- [ ] 헤더 백업 상태 표시(자동 저장 시각 / 마지막 백업 N일 전 경고)
+- [x] `navigator.storage.persist()` 요청
+- [x] 전체 프로젝트 백업 형식(version 2) 만들기·불러오기 + 테스트, More 메뉴 "Export all projects"
+- [x] 파일에 자동 저장(File System Access API, Chrome): 파일 선택 → IndexedDB에 핸들 보관 → 바뀔 때마다 저장, 권한이 풀리면 "다시 켜기"
+- [x] 헤더 백업 상태 표시(자동 저장 시각 / 마지막 백업 N일 전 경고)
+- [x] ego-browser 확인: OPFS 파일 핸들로 자동 저장(새로고침 후 켜짐·version 2·수정 1초 뒤 갱신), 1,200px 헤더 겹침 없음(이름 칸이 줄어듦). 실제 파일 선택 창은 시스템 대화상자라 사용자 확인 필요
 
 ### 23단계 — CSV 내보내기·불러오기 (추천 9)
 - [ ] `src/csv.js`: 쓰기(BOM, 따옴표, 수식 주입 방지)·읽기(따옴표·줄바꿈, 날짜 형식 몇 가지) + 테스트
