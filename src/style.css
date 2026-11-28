@@ -1088,6 +1088,14 @@ button.group-toggle:hover {
     box-shadow 150ms var(--ease);
 }
 
+/* 이름: 한 줄로 시작해 긴 이름은 줄바꿈하며 늘어나고(최대 6줄), 오른쪽 아래 모서리를 끌어 높이를 바꿀 수 있다 */
+.field textarea.name-input {
+  height: auto;
+  min-height: 38px;
+  max-height: 140px;
+  field-sizing: content;
+}
+
 .field textarea:focus {
   outline: none;
   border-color: var(--accent);

@@ -13,6 +13,7 @@ const colorOptions = document.getElementById('color-options');
 const durationHint = document.getElementById('duration-hint');
 const startLabel = document.getElementById('start-label');
 const parentSelect = document.getElementById('parent-select');
+const nameInput = form.elements.name;
 
 let current = null;
 
@@ -122,7 +123,9 @@ export function openTaskModal({ task, isNew, tasks, onSave, onDelete }) {
   parentSelect.value = groups.some((g) => g.id === task.parent) ? task.parent : '';
   parentSelect.disabled = !groups.length;
   parentSelect.title = groups.length ? '' : 'Add a task with the type “Group” first.';
-  form.elements.name.value = task.name;
+  nameInput.value = task.name;
+  // 전에 모서리를 끌어 바꾼 높이는 지우고 이름 길이에 맞춘다
+  nameInput.style.height = '';
   form.elements.start.value = task.start;
   form.elements.end.value = task.end;
   form.elements.progress.value = task.progress;
@@ -137,7 +140,8 @@ export function openTaskModal({ task, isNew, tasks, onSave, onDelete }) {
   deleteBtn.hidden = isNew;
 
   dialog.showModal();
-  form.elements.name.focus();
+  nameInput.focus();
+  fitNameHeight();
 }
 
 // 날짜 아래에 기간과 근무일(주말·공휴일 제외)을 보여 준다
@@ -162,6 +166,26 @@ function updateDurationHint() {
 }
 form.elements.start.addEventListener('input', updateDurationHint);
 form.elements.end.addEventListener('input', updateDurationHint);
+
+// 이름은 여러 줄로 보이지만 한 줄짜리 값이다: Enter는 저장, 붙여 넣은 줄바꿈은 공백으로
+nameInput.addEventListener('keydown', (e) => {
+  // 한글 입력 중 Enter(글자 확정)는 그대로 둔다
+  if (e.key !== 'Enter' || e.isComposing) return;
+  e.preventDefault();
+  form.requestSubmit();
+});
+nameInput.addEventListener('input', () => {
+  if (/[\r\n]/.test(nameInput.value)) nameInput.value = nameInput.value.replace(/\s*[\r\n]+\s*/g, ' ');
+  fitNameHeight();
+});
+
+// field-sizing을 지원하지 않는 브라우저(Safari 등)에서는 내용에 맞춰 높이를 직접 늘린다
+const autoSizes = typeof CSS !== 'undefined' && CSS.supports('field-sizing', 'content');
+function fitNameHeight() {
+  if (autoSizes) return;
+  nameInput.style.height = 'auto';
+  nameInput.style.height = `${nameInput.scrollHeight + 2}px`;
+}
 
 function showError(message, field) {
   errorEl.textContent = message;
