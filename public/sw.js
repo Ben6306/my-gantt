@@ -27,7 +27,9 @@ async function trim(cache) {
 async function networkFirst(request) {
   const cache = await caches.open(CACHE);
   try {
-    const response = await fetch(request);
+    // GitHub Pages가 페이지를 10분(max-age=600) 캐시하라고 보내서, 그대로 받으면 배포 직후에도 옛 페이지가 열린다.
+    // 브라우저 캐시를 건너뛰고 서버에 바뀌었는지 확인한다 (안 바뀌었으면 304라 가볍다)
+    const response = await fetch(request, { cache: 'no-cache' });
     if (response.ok) await cache.put('./', response.clone());
     return response;
   } catch {
