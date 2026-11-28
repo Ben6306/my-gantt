@@ -77,7 +77,8 @@ export async function exportPng({ tasks, projectName, mode, columnWidth, now = n
     hairline: cssVar('--hairline'),
     hairlineStrong: cssVar('--hairline-strong'),
     tick: cssVar('--g-tick-color'),
-    weekend: 'rgb(237 237 237 / 0.025)',
+    weekend: cssVar('--g-weekend-highlight-color'),
+    holiday: cssVar('--g-holiday-color'),
     text: cssVar('--text'),
     text2: cssVar('--text-2'),
     text3: cssVar('--text-3'),
@@ -158,8 +159,8 @@ export async function exportPng({ tasks, projectName, mode, columnWidth, now = n
 
   // 타임라인 배경: 주말, 칸 구분선, 월(연) 경계선
   for (const col of tl.columns) {
-    if (col.weekend) {
-      ctx.fillStyle = c.weekend;
+    if (col.weekend || col.holiday) {
+      ctx.fillStyle = col.holiday ? c.holiday : c.weekend;
       ctx.fillRect(gx + col.x, ty + L.headUpper, columnWidth, bottom - ty - L.headUpper);
     }
     if (col.x > 0) line(ctx, gx + col.x, ty + L.headUpper, gx + col.x, bottom, c.tick);

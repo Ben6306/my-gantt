@@ -1,6 +1,7 @@
 // 태스크 추가/수정 모달 폼을 열고 입력값을 검증해 콜백으로 넘기는 모듈
 import { joinDeps, parseDeps } from './utils.js';
 import { TASK_COLORS } from './colors.js';
+import { calendarDays, workingDays } from './holidays.js';
 
 const dialog = document.getElementById('task-modal');
 const form = document.getElementById('task-form');
@@ -9,6 +10,7 @@ const depOptions = document.getElementById('dependency-options');
 const errorEl = document.getElementById('form-error');
 const deleteBtn = document.getElementById('delete-btn');
 const colorOptions = document.getElementById('color-options');
+const durationHint = document.getElementById('duration-hint');
 
 let current = null;
 
@@ -98,6 +100,7 @@ export function openTaskModal({ task, isNew, tasks, onSave, onDelete }) {
   form.elements.progress.value = task.progress;
   form.elements.color.value = task.color;
   renderDependencyOptions(task, tasks, isNew);
+  updateDurationHint();
 
   errorEl.textContent = '';
   deleteBtn.hidden = isNew;
@@ -105,6 +108,20 @@ export function openTaskModal({ task, isNew, tasks, onSave, onDelete }) {
   dialog.showModal();
   form.elements.name.focus();
 }
+
+// 날짜 아래에 기간과 근무일(주말·공휴일 제외)을 보여 준다
+function updateDurationHint() {
+  const { start, end } = form.elements;
+  if (!start.value || !end.value || end.value < start.value) {
+    durationHint.textContent = '';
+    return;
+  }
+  const days = calendarDays(start.value, end.value);
+  const work = workingDays(start.value, end.value);
+  durationHint.textContent = `${days} ${days === 1 ? 'day' : 'days'} · ${work} working ${work === 1 ? 'day' : 'days'}`;
+}
+form.elements.start.addEventListener('input', updateDurationHint);
+form.elements.end.addEventListener('input', updateDurationHint);
 
 function showError(message, field) {
   errorEl.textContent = message;

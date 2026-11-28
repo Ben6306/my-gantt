@@ -1,5 +1,6 @@
 // PNG 내보내기용 타임라인 계산: 기간·칸·x좌표·헤더 라벨 (DOM 없는 순수 함수)
-import { addDays, parseISODate } from './utils.js';
+import { addDays, parseISODate, toISODate } from './utils.js';
+import { holidayName } from './holidays.js';
 
 const DAY_MS = 86400000;
 const monthYear = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' });
@@ -17,7 +18,7 @@ const startOfWeek = (d) => addDays(d, -((d.getDay() + 6) % 7));
  * - Day: 앞 2일, 뒤 2일 여유
  * - Week: 월요일 기준, 앞뒤 1주 여유
  * - Month: 첫 태스크의 달부터 마지막 태스크의 달까지
- * @returns {{ columns: {date: Date, x: number, label: string, weekend: boolean}[],
+ * @returns {{ columns: {date: Date, x: number, label: string, weekend: boolean, holiday: string | null}[],
  *             groups: {label: string, x: number, width: number}[],
  *             width: number, start: Date, end: Date, x: (date: Date) => number }}
  *   x(date)는 타임라인 왼쪽 끝에서 그 시각까지의 거리(px). end는 마지막 칸이 끝나는 시각(미포함).
@@ -61,6 +62,8 @@ export function buildTimeline(tasks, { mode, columnWidth }) {
       x: i * columnWidth,
       label: mode === 'Day' ? String(d.getDate()) : mode === 'Week' ? monthDay.format(d) : monthShort.format(d),
       weekend: mode === 'Day' && (d.getDay() === 0 || d.getDay() === 6),
+      // 공휴일 이름 (일 보기에서만, 아니면 null)
+      holiday: mode === 'Day' ? holidayName(toISODate(d)) : null,
     });
   }
 

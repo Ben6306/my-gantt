@@ -17,6 +17,7 @@ import { DEFAULT_ZOOM, MODE_DEFAULT_ZOOM, ZOOM_LEVELS, fitZoom, spanDays } from 
 import { exportPng } from './exportPng.js';
 import { createHistory } from './history.js';
 import { initListResizer } from './listResizer.js';
+import { HOLIDAYS, holidayName, workingDays } from './holidays.js';
 
 const DEFAULT_PROJECT_NAME = 'Untitled project';
 
@@ -116,6 +117,19 @@ function highlightChart(chart = gantt) {
   chart.$svg.querySelector(`.bar-wrapper[data-id="${CSS.escape(selectedId)}"]`)?.classList.add('is-selected');
 }
 
+// 렌더 뒤 차트를 꾸민다: 선택 강조, 공휴일 이름 툴팁. 다시 불러도 같은 결과가 되게 한다
+function decorateChart(chart = gantt) {
+  highlightChart(chart);
+  chart.$svg.querySelectorAll('.holiday-highlight:not(:has(title))').forEach((rect) => {
+    const iso = [...rect.classList].find((c) => /^\d{4}-\d{2}-\d{2}$/.test(c));
+    const name = iso && holidayName(iso);
+    if (!name) return;
+    const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    title.textContent = name;
+    rect.append(title);
+  });
+}
+
 // 막대가 보이게 가로로 옮기고, 세로로는 날짜 헤더에 가리거나 화면 아래로 벗어난 경우에만 옮긴다
 function scrollChartTo(id) {
   const bar = gantt.$svg.querySelector(`.bar-wrapper[data-id="${CSS.escape(id)}"] .bar`);
@@ -199,7 +213,7 @@ function commit(next, { redraw = true, label } = {}) {
   persist();
   renderTaskList(tasks, selectedId);
   if (redraw) redrawChart({ keepScroll: true });
-  highlightChart();
+  decorateChart();
   updateHistoryControls();
   renderProjectMenu();
 }
@@ -449,6 +463,8 @@ function openEdit(id) {
   });
 }
 
+const HOLIDAY_SET = new Set(HOLIDAYS.map((h) => h.date));
+
 const gantt = new Gantt('#gantt', chartTasks(), {
   language: 'en',
   view_mode: ZOOM_LEVELS[DEFAULT_ZOOM].mode,
@@ -460,6 +476,11 @@ const gantt = new Gantt('#gantt', chartTasks(), {
   upper_header_height: 36,
   lower_header_height: 30,
   bar_corner_radius: 4,
+  // 주말은 옅은 회색, 한국 공휴일은 옅은 빨강. 날짜 문자열 대신 함수로 넘긴다(frappe는 문자열을 new Date('YYYY-MM-DD ')로 읽어 Safari에서 깨진다)
+  holidays: {
+    'var(--g-weekend-highlight-color)': 'weekend',
+    'var(--g-holiday-color)': [(d) => HOLIDAY_SET.has(toISODate(d))],
+  },
   scroll_to: 'start',
   today_button: false,
   view_mode_select: false,
@@ -467,13 +488,16 @@ const gantt = new Gantt('#gantt', chartTasks(), {
     const { task } = ctx;
     ctx.set_title(escapeHTML(task.name));
     ctx.set_subtitle('');
-    const start = formatDate(toISODate(task._start));
-    const end = formatDate(toISODate(new Date(task._end.getTime() - 1000)));
-    ctx.set_details(`${start} – ${end} (${plural(task.actual_duration, 'day')})<br/>Progress ${Math.round(task.progress)}%`);
+    const startISO = toISODate(task._start);
+    const endISO = toISODate(new Date(task._end.getTime() - 1000));
+    const work = workingDays(startISO, endISO);
+    ctx.set_details(
+      `${formatDate(startISO)} – ${formatDate(endISO)} (${plural(task.actual_duration, 'day')}, ${work} working)<br/>Progress ${Math.round(task.progress)}%`,
+    );
   },
   on_view_change() {
     fitListSpacer(this);
-    highlightChart(this);
+    decorateChart(this);
   },
   on_click: (task) => selectTask(task.id),
   on_double_click: (task) => openEdit(task.id),
@@ -484,6 +508,13 @@ const gantt = new Gantt('#gantt', chartTasks(), {
     updateTask(task.id, { progress: Math.round(progress) }, { redraw: false, label: `Change progress of “${task.name}”` });
   },
 });
+
+// frappe는 휠로 앞뒤 여백을 늘릴 때 render()만 부르고 view_change를 보내지 않는다. 그때도 꾸미기가 사라지지 않게 감싼다
+const renderChart = gantt.render.bind(gantt);
+gantt.render = () => {
+  renderChart();
+  decorateChart();
+};
 
 document.querySelectorAll('.view-modes button').forEach((btn) => {
   btn.addEventListener('click', () => applyZoom(MODE_DEFAULT_ZOOM[btn.dataset.mode]));

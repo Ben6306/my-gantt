@@ -59,7 +59,9 @@
   --g-text-light: var(--bg-deep);
   /* 오늘 선은 색 막대들 사이에서 구분되도록 흰색 */
   --g-today-highlight: var(--text);
-  --g-weekend-highlight-color: rgb(237 237 237 / 0.02);
+  /* 주말은 옅은 회색, 공휴일은 옅은 빨강 (PNG도 같은 값) */
+  --g-weekend-highlight-color: rgb(237 237 237 / 0.035);
+  --g-holiday-color: rgb(240 84 95 / 0.09);
   --g-weekend-label-color: var(--raised);
   --g-handle-color: var(--text-2);
   --g-header-background: var(--bg);
@@ -881,6 +883,18 @@ button {
   margin: 0;
   padding: 8px 12px;
   color: var(--text-3);
+}
+
+/* 날짜 아래 기간·근무일 안내. 바로 위 날짜 줄에 붙여 보이게 위 간격을 줄인다 */
+.field-hint {
+  margin: -8px 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.field-hint:empty {
+  display: none;
 }
 
 .form-error {
