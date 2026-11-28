@@ -107,7 +107,10 @@ export async function exportPng({ tasks, projectName, mode, columnWidth, now = n
 
   const minStart = tasks.reduce((m, t) => (t.start < m ? t.start : m), tasks[0].start);
   const maxEnd = tasks.reduce((m, t) => (t.end > m ? t.end : m), tasks[0].end);
-  const subtitle = `${plural(tasks.length, 'task')} · ${formatDate(minStart)} – ${formatDate(maxEnd)}`;
+  // 개수는 목록처럼 그룹을 빼고 센다
+  const groups = tasks.filter((t) => t.type === 'group').length;
+  const counts = plural(tasks.length - groups, 'task') + (groups ? ` · ${plural(groups, 'group')}` : '');
+  const subtitle = `${counts} · ${formatDate(minStart)} – ${formatDate(maxEnd)}`;
   const exported = `Exported ${formatDate(toISODate(now))}`;
 
   // 글꼴 조각(서브셋)이 아직 안 내려와 있으면 캔버스가 다른 글꼴로 그리므로 쓸 글자를 먼저 받아 둔다
