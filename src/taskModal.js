@@ -109,6 +109,7 @@ export function openTaskModal({ task, isNew, tasks, onSave, onDelete }) {
   form.elements.end.value = task.end;
   form.elements.progress.value = task.progress;
   form.elements.done.checked = task.progress >= 100;
+  form.elements.notes.value = task.notes ?? '';
   form.elements.color.value = task.color;
   renderDependencyOptions(task, tasks, isNew);
   updateDurationHint();
@@ -163,6 +164,7 @@ form.addEventListener('submit', (e) => {
     end: milestone ? start.value : end.value,
     progress: progressValue,
     color: form.elements.color.value,
+    notes: form.elements.notes.value,
     dependencies: joinDeps([...form.querySelectorAll('input[name="dependencies"]:checked')].map((i) => i.value)),
   });
   dialog.close();

@@ -20,6 +20,7 @@ import { initListResizer } from './listResizer.js';
 import { HOLIDAYS, holidayName, workingDays } from './holidays.js';
 import { isLate, scheduleStatus, statusText } from './status.js';
 import { cleanTask, isMilestone } from './taskFields.js';
+import { duplicateTask } from './tree.js';
 
 const DEFAULT_PROJECT_NAME = 'Untitled project';
 
@@ -388,6 +389,17 @@ function updateTask(id, changes, options) {
   );
 }
 
+// 바로 아래에 "(copy)"로 복제하고 복제본을 선택한다 (그룹이면 자식까지)
+function duplicate(id) {
+  const task = tasks.find((t) => t.id === id);
+  const result = task && duplicateTask(tasks, id, Number(nextId()));
+  if (!result) return;
+  selectedId = result.id;
+  commit(result.tasks, { label: `Duplicate “${task.name}”` });
+  scrollChartTo(result.id);
+  rowsEl.querySelector(`.task-row[data-id="${CSS.escape(result.id)}"]`)?.focus();
+}
+
 async function requestDelete(id) {
   const task = tasks.find((t) => t.id === id);
   if (!task) return false;
@@ -530,7 +542,11 @@ const gantt = new Gantt('#gantt', chartTasks(), {
       original && isMilestone(original)
         ? `Milestone · ${formatDate(startISO)}<br/>${progress >= 100 ? 'Done' : 'Not done'}`
         : `${formatDate(startISO)} – ${formatDate(endISO)} (${plural(task.actual_duration, 'day')}, ${work} working)<br/>Progress ${progress}%`;
-    ctx.set_details(`${when}${late}`);
+    // 메모는 길면 잘라서, 줄바꿈은 살려서
+    const notes = original?.notes
+      ? `<div class="popup-notes">${escapeHTML(original.notes.length > 280 ? `${original.notes.slice(0, 280)}…` : original.notes)}</div>`
+      : '';
+    ctx.set_details(`${when}${late}${notes}`);
   },
   on_view_change() {
     fitListSpacer(this);
@@ -632,7 +648,12 @@ document.addEventListener('keydown', (e) => {
   if (document.querySelector('dialog[open]')) return;
   if (!(isMac ? e.metaKey : e.ctrlKey) || e.altKey) return;
   const key = e.key.toLowerCase();
-  if (key === 'z' && !e.shiftKey) {
+  if (key === 'd' && !e.shiftKey) {
+    // ⌘D/Ctrl+D: 선택한 태스크 복제 (브라우저 북마크 대신)
+    if (!selectedId) return;
+    e.preventDefault();
+    duplicate(selectedId);
+  } else if (key === 'z' && !e.shiftKey) {
     e.preventDefault();
     undo();
   } else if ((key === 'z' && e.shiftKey) || (key === 'y' && !isMac)) {
@@ -656,6 +677,7 @@ rowsEl.addEventListener('click', (e) => {
   if (!row) return;
   const action = e.target.closest('[data-action]')?.dataset.action;
   if (action === 'edit') openEdit(row.dataset.id);
+  else if (action === 'duplicate') duplicate(row.dataset.id);
   else if (action === 'delete') requestDelete(row.dataset.id);
   else selectTask(row.dataset.id, { scrollChart: true });
 });

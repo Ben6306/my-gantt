@@ -429,7 +429,7 @@ button {
 .task-row {
   display: grid;
   /* 날짜 칸은 "Dec 28, 2026"이 들어가는 너비 */
-  grid-template-columns: minmax(0, 1fr) 92px 92px 88px 56px;
+  grid-template-columns: minmax(0, 1fr) 92px 92px 88px 84px;
   gap: 12px;
   align-items: center;
   padding: 0 8px 0 16px;
@@ -544,6 +544,22 @@ button {
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.note-icon {
+  display: grid;
+  flex: none;
+  color: var(--text-3);
+}
+
+.note-icon svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .color-dot {
@@ -780,6 +796,16 @@ button {
   color: var(--text-2);
 }
 
+.chart .gantt-container .popup-wrapper .popup-notes {
+  max-width: 280px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .chart .gantt-container .popup-wrapper .popup-late.is-overdue {
   color: var(--danger);
 }
@@ -936,6 +962,27 @@ button {
 /* 마일스톤은 날짜가 하나라 날짜 줄을 한 칸으로 */
 #task-form[data-type='milestone'] .field-row {
   grid-template-columns: 1fr;
+}
+
+.field textarea {
+  min-height: 72px;
+  padding: 8px 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 8px;
+  background: var(--bg);
+  font: inherit;
+  line-height: 20px;
+  color: inherit;
+  resize: vertical;
+  transition:
+    border-color 150ms var(--ease),
+    box-shadow 150ms var(--ease);
+}
+
+.field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .field input:is([type='text'], [type='date'], [type='number']) {
