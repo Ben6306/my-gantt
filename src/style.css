@@ -875,6 +875,10 @@ button.group-toggle:hover {
   overflow-wrap: anywhere;
 }
 
+.chart .gantt-container .popup-wrapper .popup-baseline {
+  color: var(--text-3);
+}
+
 .chart .gantt-container .popup-wrapper .popup-late.is-overdue {
   color: var(--danger);
 }
@@ -1483,6 +1487,29 @@ button.group-toggle:hover {
 
 .filter-menu {
   width: 260px;
+}
+
+.more-menu {
+  width: 280px;
+}
+
+.more-menu .project-menu-label:not(:first-child) {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+
+.menu-action:disabled {
+  color: var(--text-3);
+  cursor: default;
+  background: none;
+}
+
+/* 기준선: 막대 바로 아래 얇은 회색 막대 (처음 계획한 기간) */
+.chart .gantt .baseline-bar {
+  fill: var(--text-3);
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 .menu-check {

@@ -185,9 +185,9 @@
 - [x] PNG는 보이는 행만
 
 ### 21단계 — 기준선 (추천 10)
-- [ ] 헤더 "More" 메뉴 추가: Set baseline / Clear baseline
-- [ ] 데이터 `baselineStart`·`baselineEnd`, 차트 막대 아래 얇은 기준선 막대, 팝업에 "+N days" + 테스트
-- [ ] PNG에도 기준선
+- [x] 헤더 "More" 메뉴 추가: Set baseline / Clear baseline
+- [x] 데이터 `baselineStart`·`baselineEnd`, 차트 막대 아래 얇은 기준선 막대, 팝업에 "+N days" + 테스트
+- [x] PNG에도 기준선
 
 ### 22단계 — 자동 백업 (추천 1)
 - [ ] `navigator.storage.persist()` 요청

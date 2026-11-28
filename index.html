@@ -55,6 +55,23 @@
           <button type="button" id="export-btn" class="btn-ghost" title="Save all tasks to a JSON backup file">Export JSON</button>
           <button type="button" id="import-btn" class="btn-ghost" title="Load tasks from a JSON backup file">Import JSON</button>
           <input type="file" id="import-file" accept=".json,application/json" hidden />
+          <button
+            type="button"
+            id="more-btn"
+            class="btn-ghost"
+            popovertarget="more-menu"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            title="Baseline, spreadsheet, sharing and backup"
+          >
+            More
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+          </button>
+          <div id="more-menu" class="project-menu more-menu" popover>
+            <p class="project-menu-label">Baseline</p>
+            <button type="button" id="baseline-set-btn" class="menu-action">Save current dates as baseline</button>
+            <button type="button" id="baseline-clear-btn" class="menu-action">Clear baseline</button>
+          </div>
           <button type="button" id="new-project-btn" class="btn-ghost" title="Start a new empty project (your other projects stay)">New project</button>
         </div>
       </header>

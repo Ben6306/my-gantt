@@ -83,7 +83,9 @@ function line(ctx, x1, y1, x2, y2, color, width = 1) {
  * @returns {Promise<string>} 내려받은 파일 이름
  */
 export async function exportPng({ tasks, projectName, mode, columnWidth, now = new Date() }) {
-  const tl = buildTimeline(tasks, { mode, columnWidth });
+  // 기준선이 지금 일정 밖에 있어도 잘리지 않게 기간에 넣는다
+  const spans = tasks.flatMap((t) => (t.baselineStart ? [t, { start: t.baselineStart, end: t.baselineEnd }] : [t]));
+  const tl = buildTimeline(spans, { mode, columnWidth });
 
   const c = {
     bg: cssVar('--bg'),
@@ -303,6 +305,20 @@ export async function exportPng({ tasks, projectName, mode, columnWidth, now = n
       ctx.fill();
     }
   }
+
+  // 기준선: 막대 바로 아래 얇은 회색 막대 (화면과 같은 자리)
+  ctx.fillStyle = c.text3;
+  ctx.globalAlpha = 0.55;
+  for (const t of tasks) {
+    if (!t.baselineStart) continue;
+    const { top } = geo.get(t.id);
+    const bx1 = gx + tl.x(parseISODate(t.baselineStart));
+    const bx2 = gx + tl.x(addDays(parseISODate(t.baselineEnd), 1));
+    ctx.beginPath();
+    ctx.roundRect(bx1, top + L.barH + 2, Math.max(2, bx2 - bx1), 4, 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
 
   // 막대
   for (const t of tasks) {

@@ -20,6 +20,7 @@ import { initListResizer } from './listResizer.js';
 import { HOLIDAYS, holidayName, workingDays } from './holidays.js';
 import { isLate, scheduleStatus, statusText } from './status.js';
 import { cleanTask, isGroup, isMilestone } from './taskFields.js';
+import { baselineSlip, clearBaseline, hasBaseline, setBaseline, slipText } from './baseline.js';
 import { childCounts, dropAnchor, duplicateTask, moveNextTo, moveSibling, normalizeTree, visibleTasks } from './tree.js';
 
 const DEFAULT_PROJECT_NAME = 'Untitled project';
@@ -197,6 +198,7 @@ function decorateChart(chart = gantt) {
       });
     }
   }
+  drawBaselines(chart);
   chart.$svg.querySelectorAll('.holiday-highlight:not(:has(title))').forEach((rect) => {
     const iso = [...rect.classList].find((c) => /^\d{4}-\d{2}-\d{2}$/.test(c));
     const name = iso && holidayName(iso);
@@ -205,6 +207,36 @@ function decorateChart(chart = gantt) {
     title.textContent = name;
     rect.append(title);
   });
+}
+
+/*
+ * 기준선: 막대 바로 아래 얇은 회색 막대. 막대 위치를 기준으로 (기준선 날짜 − 지금 날짜)만큼 옮겨 그린다 —
+ * 날짜가 같으면 막대와 정확히 겹친다(월 보기에서 frappe와 계산법이 조금 달라도 어긋나지 않게).
+ * 막대보다 아래 층(.bar 층 앞)에 두고 다시 부를 때마다 새로 그린다.
+ */
+function drawBaselines(chart) {
+  chart.$svg.querySelector('.baseline-layer')?.remove();
+  if (!hasBaseline(tasks)) return;
+  const layer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  layer.setAttribute('class', 'baseline-layer');
+  const x = (iso) => posAtTime(parseISODate(iso).getTime(), chart);
+  for (const t of tasks) {
+    if (!t.baselineStart) continue;
+    const bar = chart.$svg.querySelector(`.bar-wrapper[data-id="${CSS.escape(t.id)}"] .bar`);
+    if (!bar) continue;
+    const nextDay = (iso) => toISODate(addDays(parseISODate(iso), 1));
+    const left = bar.getX() + x(t.baselineStart) - x(t.start);
+    const right = bar.getX() + bar.getWidth() + x(nextDay(t.baselineEnd)) - x(nextDay(t.end));
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('class', 'baseline-bar');
+    rect.setAttribute('x', String(left));
+    rect.setAttribute('y', String(bar.getY() + chart.options.bar_height + 2));
+    rect.setAttribute('width', String(Math.max(2, right - left)));
+    rect.setAttribute('height', '4');
+    rect.setAttribute('rx', '2');
+    layer.append(rect);
+  }
+  chart.layers.bar.before(layer);
 }
 
 // 막대가 보이게 가로로 옮기고, 세로로는 날짜 헤더에 가리거나 화면 아래로 벗어난 경우에만 옮긴다
@@ -244,14 +276,18 @@ function timeAtView(px) {
   return dates[i].getTime() + ((pos - i * cw) / cw) * (dates[i + 1] - dates[i]);
 }
 
-// 그 시각이 차트 화면 왼쪽에서 px 떨어진 곳에 오도록 스크롤
-function scrollTimeTo(time, px) {
-  const { dates } = gantt;
-  const cw = gantt.config.column_width;
+// 차트 왼쪽 끝(gantt_start)에서 그 시각까지의 거리(px). 칸 사이는 시각 비율로 나눈다
+function posAtTime(time, chart = gantt) {
+  const { dates } = chart;
+  const cw = chart.config.column_width;
   let i = dates.findIndex((d, k) => k === dates.length - 1 || dates[k + 1].getTime() > time);
   i = Math.min(Math.max(i, 0), dates.length - 2);
-  const pos = i * cw + ((time - dates[i]) / (dates[i + 1] - dates[i])) * cw;
-  gantt.$container.scrollLeft = Math.max(0, pos - px);
+  return i * cw + ((time - dates[i]) / (dates[i + 1] - dates[i])) * cw;
+}
+
+// 그 시각이 차트 화면 왼쪽에서 px 떨어진 곳에 오도록 스크롤
+function scrollTimeTo(time, px) {
+  gantt.$container.scrollLeft = Math.max(0, posAtTime(time) - px);
 }
 
 function applyZoom(index, { anchorTime } = {}) {
@@ -600,11 +636,15 @@ const gantt = new Gantt('#gantt', chartTasks(), {
     let when = `${formatDate(startISO)} – ${formatDate(endISO)} (${plural(task.actual_duration, 'day')}, ${work} working)<br/>Progress ${progress}%`;
     if (original && isMilestone(original)) when = `Milestone · ${formatDate(startISO)}<br/>${progress >= 100 ? 'Done' : 'Not done'}`;
     else if (original && isGroup(original)) when = `Group of ${plural(kids, 'task')}<br/>${when}`;
+    const slip = original && baselineSlip(original);
+    const baseline = slip
+      ? `<br/><span class="popup-baseline">Baseline ${formatDate(original.baselineStart)} – ${formatDate(original.baselineEnd)} · ${slipText(slip)}</span>`
+      : '';
     // 메모는 길면 잘라서, 줄바꿈은 살려서
     const notes = original?.notes
       ? `<div class="popup-notes">${escapeHTML(original.notes.length > 280 ? `${original.notes.slice(0, 280)}…` : original.notes)}</div>`
       : '';
-    ctx.set_details(`${when}${late}${notes}`);
+    ctx.set_details(`${when}${late}${baseline}${notes}`);
   },
   on_view_change() {
     fitListSpacer(this);
@@ -666,6 +706,46 @@ projectMenu.addEventListener('click', (e) => {
   }
 });
 document.getElementById('export-btn').addEventListener('click', exportBackup);
+
+// More 메뉴: 헤더 오른쪽 버튼이라 메뉴 오른쪽 끝을 버튼에 맞춘다
+const moreMenu = document.getElementById('more-menu');
+const moreBtn = document.getElementById('more-btn');
+moreMenu.addEventListener('toggle', (e) => {
+  const open = e.newState === 'open';
+  moreBtn.setAttribute('aria-expanded', String(open));
+  if (open) {
+    document.getElementById('baseline-clear-btn').disabled = !hasBaseline(tasks);
+    const r = moreBtn.getBoundingClientRect();
+    moreMenu.style.top = `${r.bottom + 6}px`;
+    moreMenu.style.left = `${Math.max(8, r.right - moreMenu.offsetWidth)}px`;
+  }
+});
+moreMenu.addEventListener('click', (e) => {
+  if (e.target.closest('button')) moreMenu.hidePopover();
+});
+
+async function saveBaseline() {
+  if (!tasks.length) {
+    showToast('Add a task before saving a baseline.');
+    return;
+  }
+  if (hasBaseline(tasks)) {
+    const ok = await confirmDialog({
+      title: 'Replace baseline',
+      message: `Replace the saved baseline with today’s dates? You can undo this with ${UNDO_KEY}.`,
+      confirmText: 'Replace',
+    });
+    if (!ok) return;
+  }
+  commit(setBaseline(tasks), { label: 'Save baseline' });
+  showToast('Saved the current dates as the baseline. Changes from now on show as gray bars under each task.');
+}
+
+document.getElementById('baseline-set-btn').addEventListener('click', saveBaseline);
+document.getElementById('baseline-clear-btn').addEventListener('click', () => {
+  commit(clearBaseline(tasks), { label: 'Clear baseline' });
+  showToast(`Cleared the baseline. You can undo this with ${UNDO_KEY}.`);
+});
 
 const importInput = document.getElementById('import-file');
 document.getElementById('import-btn').addEventListener('click', () => importInput.click());
