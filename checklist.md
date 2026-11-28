@@ -230,3 +230,5 @@
 - [x] 팝업 문구, PNG도 같은 표시, README
 - [x] ego-browser 확인: 목록 실제/계획 날짜·"plan …"·버튼(Start/Finish/없음), 차트 실제 막대·점선 계획, Start·Finish·⌘Z, 진행률 20% → 실제 시작 자동, 모달 4칸(각 135px), 팝업 "started 1 day late · finished 2 days late", PNG
 - [x] 이름이 실제 막대에 겹침(실제가 계획보다 길 때) → 더 늦은 끝 뒤로 (차트·PNG)
+
+- [x] 25·26단계 배포 (9cc0958, Actions 성공 2026-11-28 10:44 KST, 배포 사이트에 Actual start 칸·이름 textarea 반영 확인)
