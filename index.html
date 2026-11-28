@@ -132,7 +132,7 @@
       </main>
     </div>
 
-    <dialog id="task-modal" class="modal">
+    <dialog id="task-modal" class="modal modal-wide">
       <form id="task-form" method="dialog" novalidate>
         <h2 id="modal-title">Add task</h2>
 
@@ -141,6 +141,7 @@
           <div class="segmented" id="type-options">
             <label><input type="radio" name="type" value="task" /><span>Task</span></label>
             <label><input type="radio" name="type" value="milestone" /><span>Milestone</span></label>
+            <label><input type="radio" name="type" value="group" /><span>Group</span></label>
           </div>
         </fieldset>
 
@@ -159,32 +160,41 @@
             <input name="end" type="date" required />
           </label>
         </div>
-        <p id="duration-hint" class="field-hint not-milestone" aria-live="polite"></p>
+        <p id="duration-hint" class="field-hint" aria-live="polite"></p>
+
+        <div class="field-row">
+          <label class="field not-group">
+            <span>In group</span>
+            <select name="parent" id="parent-select"></select>
+          </label>
+          <label class="field not-milestone">
+            <span>Progress (%)</span>
+            <input name="progress" type="number" min="0" max="100" step="1" inputmode="numeric" required />
+          </label>
+          <label class="field field-check-cell only-milestone">
+            <span>Status</span>
+            <span class="field-check">
+              <input name="done" type="checkbox" />
+              <span>Done</span>
+            </span>
+          </label>
+        </div>
 
         <fieldset class="field">
           <legend>Color</legend>
           <div id="color-options" class="color-options"></div>
         </fieldset>
 
-        <label class="field-check only-milestone">
-          <input name="done" type="checkbox" />
-          <span>Done</span>
-        </label>
-
-        <label class="field not-milestone">
-          <span>Progress (%)</span>
-          <input name="progress" type="number" min="0" max="100" step="1" inputmode="numeric" required />
-        </label>
-
-        <fieldset class="field">
-          <legend>Depends on</legend>
-          <div id="dependency-options" class="dependency-options"></div>
-        </fieldset>
-
-        <label class="field">
-          <span>Notes</span>
-          <textarea name="notes" rows="3" maxlength="2000" placeholder="Details, links, who’s on it…"></textarea>
-        </label>
+        <div class="field-row">
+          <fieldset class="field not-group">
+            <legend>Depends on</legend>
+            <div id="dependency-options" class="dependency-options"></div>
+          </fieldset>
+          <label class="field">
+            <span>Notes</span>
+            <textarea name="notes" rows="5" maxlength="2000" placeholder="Details, links, who’s on it…"></textarea>
+          </label>
+        </div>
 
         <p id="form-error" class="form-error" role="alert"></p>
 

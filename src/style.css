@@ -570,6 +570,49 @@ button {
   background: var(--c);
 }
 
+/* 그룹: 접기 단추 + 굵은 이름, 자식은 그룹의 색 점 위치까지 들여쓴다 */
+.group-toggle {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-left: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-3);
+}
+
+.group-toggle svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 150ms var(--ease);
+}
+
+button.group-toggle:hover {
+  background: var(--raised-hover);
+  color: var(--text);
+}
+
+.group-toggle[aria-expanded='true'] svg {
+  transform: rotate(90deg);
+}
+
+.task-row.is-group .task-name-text {
+  font-weight: 600;
+}
+
+.task-row.is-child .task-name {
+  padding-left: 20px;
+}
+
 /* 마일스톤은 색 점을 마름모로 */
 .task-row.is-milestone .color-dot {
   border-radius: 2px;
@@ -749,6 +792,32 @@ button {
   stroke-dasharray: 4 3;
 }
 
+/* 그룹 막대: 모서리를 각지게, 조금 진하게, 이름 굵게. 자식이 있으면(is-locked) 끌 수 없어 손잡이를 숨긴다 */
+.chart .gantt .bar-wrapper.is-group .bar {
+  rx: 1px;
+  ry: 1px;
+  fill: color-mix(in srgb, var(--c, #8b93a1) 40%, var(--bg));
+  stroke: color-mix(in srgb, var(--c, #8b93a1) 75%, var(--bg));
+  stroke-width: 1.5px;
+}
+
+.chart .gantt .bar-wrapper.is-group .bar-progress {
+  rx: 1px;
+  ry: 1px;
+}
+
+.chart .gantt .bar-wrapper.is-group .bar-label {
+  font-weight: 700;
+}
+
+.chart .gantt .bar-wrapper.is-locked {
+  cursor: default;
+}
+
+.chart .gantt .bar-wrapper.is-locked .handle {
+  display: none;
+}
+
 /* 마일스톤: 하루 폭 막대를 정사각형(--ms-sx는 main.js가 계산)으로 늘여 45° 돌린 마름모. 끝나면 진한 색 */
 .chart .gantt .bar-wrapper.is-milestone .bar {
   transform-box: fill-box;
@@ -885,10 +954,43 @@ button {
   margin-bottom: 8px;
 }
 
+.modal-wide {
+  width: min(560px, calc(100vw - 32px));
+}
+
+/* 칸 두 개를 나란히. 종류에 따라 한쪽이 숨으면 남은 칸이 줄을 채운다 */
 .field-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
   gap: 12px;
+}
+
+.field-row > * {
+  flex: 1;
+}
+
+.field select {
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 8px;
+  background: var(--bg);
+  font: inherit;
+  color: inherit;
+}
+
+.field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.field input:disabled {
+  color: var(--text-3);
+  cursor: not-allowed;
+}
+
+.field-check-cell .field-check {
+  height: 36px;
 }
 
 /* 종류 선택(Task / Milestone / Group): 차트 툴바의 Day/Week/Month와 같은 모양 */
@@ -955,16 +1057,13 @@ button {
 
 /* 종류에 따라 칸 숨기기 (form[data-type]은 taskModal.js가 붙인다) */
 #task-form:not([data-type='milestone']) .only-milestone,
-#task-form[data-type='milestone'] .not-milestone {
+#task-form[data-type='milestone'] .not-milestone,
+#task-form[data-type='group'] .not-group {
   display: none;
 }
 
-/* 마일스톤은 날짜가 하나라 날짜 줄을 한 칸으로 */
-#task-form[data-type='milestone'] .field-row {
-  grid-template-columns: 1fr;
-}
-
 .field textarea {
+  height: 140px;
   min-height: 72px;
   padding: 8px 12px;
   border: 1px solid var(--hairline-strong);
@@ -1050,7 +1149,8 @@ button {
 .dependency-options {
   display: flex;
   flex-direction: column;
-  max-height: 168px;
+  /* 옆의 메모 칸과 같은 높이 */
+  height: 140px;
   overflow-y: auto;
   border: 1px solid var(--hairline-strong);
   border-radius: 8px;

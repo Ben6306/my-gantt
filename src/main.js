@@ -11,7 +11,7 @@ import { openTaskModal } from './taskModal.js';
 import { confirmDialog } from './confirmDialog.js';
 import { backupFileName, buildBackup, parseBackup } from './backup.js';
 import { showToast } from './toast.js';
-import { addDays, escapeHTML, formatDate, joinDeps, moveItem, parseDeps, parseISODate, plural, toISODate } from './utils.js';
+import { addDays, escapeHTML, formatDate, joinDeps, parseDeps, parseISODate, plural, toISODate } from './utils.js';
 import { colorFor, isColorKey } from './colors.js';
 import { DEFAULT_ZOOM, MODE_DEFAULT_ZOOM, ZOOM_LEVELS, fitZoom, spanDays } from './zoom.js';
 import { exportPng } from './exportPng.js';
@@ -19,13 +19,14 @@ import { createHistory } from './history.js';
 import { initListResizer } from './listResizer.js';
 import { HOLIDAYS, holidayName, workingDays } from './holidays.js';
 import { isLate, scheduleStatus, statusText } from './status.js';
-import { cleanTask, isMilestone } from './taskFields.js';
-import { duplicateTask } from './tree.js';
+import { cleanTask, isGroup, isMilestone } from './taskFields.js';
+import { childCounts, dropAnchor, duplicateTask, moveNextTo, moveSibling, normalizeTree, visibleTasks } from './tree.js';
 
 const DEFAULT_PROJECT_NAME = 'Untitled project';
 
-// 태스크 목록을 저장 형식으로 정리한다: 선택 필드(종류·메모 등)는 기본값이면 빼고, 마일스톤은 하루짜리로
-const normalizeTasks = (list) => list.map(cleanTask);
+// 태스크 목록을 저장 형식으로 정리한다: 선택 필드(종류·메모 등)는 기본값이면 빼고, 마일스톤은 하루짜리로,
+// 그룹 자식은 그룹 바로 아래로 모으고 그룹 기간·진행률은 자식으로 계산
+const normalizeTasks = (list) => normalizeTree(list.map(cleanTask));
 
 // 이전 버전 데이터 맞추기: dependencies 배열 → 문자열, 색상이 없으면 순서대로 기본 색
 const normalize = (list) =>
@@ -65,6 +66,8 @@ let recordingBatch = false;
 // 누른 순간부터 뗄 때까지를 한 번으로 기록하기 위한 상태
 let pointerDownOnChart = false;
 let gestureRecorded = false;
+// 그룹 자식을 끌면 그룹 막대(자동 기간·진행률)도 바뀌므로, 끌기를 마친 뒤 차트를 한 번 다시 그린다
+let redrawAfterGesture = false;
 
 // 바뀌기 전 상태를 이력에 남긴다. 한 동작에서 이어지는 변경은 하나로 묶는다
 // (막대를 끄는 동안의 연속 변경과 의존 태스크 이동, 태스크와 이름을 함께 바꾸는 불러오기)
@@ -100,10 +103,25 @@ const projectNameInput = document.getElementById('project-name');
 
 const nextId = () => String(Math.max(0, ...tasks.map((t) => Number(t.id)).filter(Number.isFinite)) + 1);
 
+// 목록·차트에 보이는 행 (접힌 그룹의 자식은 숨김)
+const shownTasks = () => visibleTasks(tasks);
+
 // 막대 색은 custom_class(.c-<색>)로 style.css에서 입힌다.
 // color는 넘기지 않는다: frappe-gantt가 task.color를 막대 fill에 그대로 넣어서 'blue'·'red'가 원색으로 칠해진다.
-const chartTasks = () =>
-  tasks.map(({ color, ...t }) => ({ ...t, dependencies: parseDeps(t.dependencies), custom_class: `c-${color}` }));
+// 숨긴 태스크로 가는 의존성은 뺀다: frappe는 막대를 끌 때 선행 막대를 찾는데(get_bar) 없으면 오류가 난다.
+function chartTasks() {
+  const shown = shownTasks();
+  const ids = new Set(shown.map((t) => t.id));
+  return shown.map(({ color, ...t }) => ({
+    ...t,
+    dependencies: parseDeps(t.dependencies).filter((d) => ids.has(d)),
+    custom_class: `c-${color}`,
+  }));
+}
+
+function renderList() {
+  renderTaskList({ rows: shownTasks(), all: tasks, selectedId, canReorder: true });
+}
 
 function setProjectName(name, { save = true, label } = {}) {
   const next = name.trim() || DEFAULT_PROJECT_NAME;
@@ -120,8 +138,8 @@ function setProjectName(name, { save = true, label } = {}) {
 function highlightChart(chart = gantt) {
   chart.$svg.querySelectorAll('.is-selected').forEach((el) => el.classList.remove('is-selected'));
   if (!selectedId) return;
-  const index = tasks.findIndex((t) => t.id === selectedId);
-  chart.$svg.querySelectorAll('.grid-row')[index]?.classList.add('is-selected');
+  const index = shownTasks().findIndex((t) => t.id === selectedId);
+  if (index !== -1) chart.$svg.querySelectorAll('.grid-row')[index]?.classList.add('is-selected');
   chart.$svg.querySelector(`.bar-wrapper[data-id="${CSS.escape(selectedId)}"]`)?.classList.add('is-selected');
 }
 
@@ -131,6 +149,7 @@ function decorateChart(chart = gantt) {
   // 월 보기에서는 하루 폭이 3~4px라 주말·공휴일 음영이 바코드처럼 보여서 CSS로 숨긴다
   chart.$container.dataset.mode = chart.options.view_mode;
   const today = toISODate(new Date());
+  const counts = childCounts(tasks);
   for (const t of tasks) {
     const wrapper = chart.$svg.querySelector(`.bar-wrapper[data-id="${CSS.escape(t.id)}"]`);
     if (!wrapper) continue;
@@ -139,6 +158,9 @@ function decorateChart(chart = gantt) {
     wrapper.classList.toggle('is-behind', status === 'behind');
     wrapper.classList.toggle('is-done', t.progress >= 100);
     wrapper.classList.toggle('is-milestone', isMilestone(t));
+    // 자식이 있는 그룹은 기간이 자동이라 끌 수 없게 표시 (끌기는 아래 mousedown에서 막는다)
+    wrapper.classList.toggle('is-group', isGroup(t));
+    wrapper.classList.toggle('is-locked', isGroup(t) && counts.has(t.id));
     if (isMilestone(t)) {
       // 하루 폭 막대를 CSS로 정사각형으로 늘인 뒤 45° 돌려 마름모로 그린다. 막대 자체를 바꾸므로 끄는 동안에도 따라간다
       const rect = wrapper.querySelector('.bar');
@@ -231,9 +253,10 @@ function updateZoomControls() {
 
 // 일정 전체가 한 화면에 들어오는 단계로 바꾸고, 첫 태스크가 왼쪽에서 한 칸 띄워 보이게 한다
 function fitToScreen() {
-  if (!tasks.length) return;
-  const index = fitZoom(spanDays(tasks), gantt.$container.clientWidth);
-  const first = tasks.reduce((m, t) => (t.start < m ? t.start : m), tasks[0].start);
+  const shown = shownTasks();
+  if (!shown.length) return;
+  const index = fitZoom(spanDays(shown), gantt.$container.clientWidth);
+  const first = shown.reduce((m, t) => (t.start < m ? t.start : m), shown[0].start);
   applyZoom(index, { anchorTime: parseISODate(first).getTime() });
   gantt.$container.scrollLeft -= gantt.config.column_width;
 }
@@ -243,7 +266,7 @@ function commit(next, { redraw = true, label } = {}) {
   if (label) record(label);
   tasks = normalizeTasks(next);
   persist();
-  renderTaskList(tasks, selectedId);
+  renderList();
   if (redraw) redrawChart({ keepScroll: true });
   decorateChart();
   updateHistoryControls();
@@ -269,7 +292,7 @@ function showProject({ keepScroll = false } = {}) {
   tasks = currentProject().tasks;
   if (selectedId && !tasks.some((t) => t.id === selectedId)) selectedId = null;
   setProjectName(currentProject().name, { save: false });
-  renderTaskList(tasks, selectedId);
+  renderList();
   redrawChart({ keepScroll });
   highlightChart();
   updateHistoryControls();
@@ -403,9 +426,11 @@ function duplicate(id) {
 async function requestDelete(id) {
   const task = tasks.find((t) => t.id === id);
   if (!task) return false;
+  // 그룹을 지우면 자식은 지우지 않고 그룹 밖으로 꺼낸다 (normalizeTree가 parent를 정리)
+  const kids = childCounts(tasks).get(id) ?? 0;
   const ok = await confirmDialog({
-    title: 'Delete task',
-    message: `Delete “${task.name}”? You can undo this with ${UNDO_KEY}.`,
+    title: isGroup(task) ? 'Delete group' : 'Delete task',
+    message: `Delete “${task.name}”?${kids ? ` Its ${plural(kids, 'task')} will stay, outside the group.` : ''} You can undo this with ${UNDO_KEY}.`,
     confirmText: 'Delete',
   });
   if (!ok) return false;
@@ -420,16 +445,18 @@ async function requestDelete(id) {
   return true;
 }
 
+// 화면에 보이는 행(접힌 그룹의 자식 제외) 그대로 그린다
 async function exportImage(button) {
-  if (!tasks.length) {
+  const shown = shownTasks();
+  if (!shown.length) {
     showToast('Add a task before exporting an image.');
     return;
   }
   button.disabled = true;
   try {
     const { mode, columnWidth } = ZOOM_LEVELS[zoomIndex];
-    const fileName = await exportPng({ tasks, projectName, mode, columnWidth });
-    showToast(`Exported ${plural(tasks.length, 'task')} to ${fileName}.`);
+    const fileName = await exportPng({ tasks: shown, projectName, mode, columnWidth });
+    showToast(`Exported ${plural(shown.length, 'row')} to ${fileName}.`);
   } catch (err) {
     showToast(`Couldn’t export the image. ${err.message}`, { type: 'error' });
   } finally {
@@ -460,10 +487,17 @@ async function importBackup(file) {
   // 지금 프로젝트를 덮어쓰지 않고 새 프로젝트로 추가한다 (잃는 것이 없으므로 묻지 않는다)
   const name = result.projectName ?? file.name.replace(/\.json$/i, '');
   record(`Import “${name}”`);
-  const project = createProject(name, result.tasks);
+  const project = createProject(name, normalizeTasks(result.tasks));
   setProjects([...projects, project], project.id);
   const dropped = result.droppedDeps ? ` Removed ${plural(result.droppedDeps, 'link')} to missing tasks.` : '';
   showToast(`Imported “${name}” as a new project with ${plural(result.tasks.length, 'task')}.${dropped}`);
+}
+
+// 선택한 행이 그룹(또는 그룹의 자식)이면 새 태스크를 그 그룹에 넣는다
+function groupOfSelection() {
+  const selected = tasks.find((t) => t.id === selectedId);
+  if (!selected) return '';
+  return isGroup(selected) ? selected.id : (selected.parent ?? '');
 }
 
 function openAdd() {
@@ -476,6 +510,7 @@ function openAdd() {
       progress: 0,
       dependencies: '',
       color: colorFor(tasks.length),
+      parent: groupOfSelection(),
     },
     isNew: true,
     tasks,
@@ -538,10 +573,10 @@ const gantt = new Gantt('#gantt', chartTasks(), {
     const status = scheduleStatus({ start: startISO, end: endISO, progress }, toISODate(new Date()));
     const late = isLate(status) ? `<br/><span class="popup-late is-${status.status}">${statusText(status, progress)}</span>` : '';
     const original = tasks.find((t) => t.id === task.id);
-    const when =
-      original && isMilestone(original)
-        ? `Milestone · ${formatDate(startISO)}<br/>${progress >= 100 ? 'Done' : 'Not done'}`
-        : `${formatDate(startISO)} – ${formatDate(endISO)} (${plural(task.actual_duration, 'day')}, ${work} working)<br/>Progress ${progress}%`;
+    const kids = childCounts(tasks).get(task.id) ?? 0;
+    let when = `${formatDate(startISO)} – ${formatDate(endISO)} (${plural(task.actual_duration, 'day')}, ${work} working)<br/>Progress ${progress}%`;
+    if (original && isMilestone(original)) when = `Milestone · ${formatDate(startISO)}<br/>${progress >= 100 ? 'Done' : 'Not done'}`;
+    else if (original && isGroup(original)) when = `Group of ${plural(kids, 'task')}<br/>${when}`;
     // 메모는 길면 잘라서, 줄바꿈은 살려서
     const notes = original?.notes
       ? `<div class="popup-notes">${escapeHTML(original.notes.length > 280 ? `${original.notes.slice(0, 280)}…` : original.notes)}</div>`
@@ -556,9 +591,11 @@ const gantt = new Gantt('#gantt', chartTasks(), {
   on_double_click: (task) => openEdit(task.id),
   on_date_change: (task, start, end) => {
     updateTask(task.id, { start: toISODate(start), end: toISODate(end) }, { redraw: false, label: `Move “${task.name}”` });
+    if (task.parent) redrawAfterGesture = true;
   },
   on_progress_change: (task, progress) => {
     updateTask(task.id, { progress: Math.round(progress) }, { redraw: false, label: `Change progress of “${task.name}”` });
+    if (task.parent) redrawAfterGesture = true;
   },
 });
 
@@ -619,14 +656,23 @@ importInput.addEventListener('change', () => {
 // 캡처 단계로 받아 frappe 처리보다 먼저 표시한다. 떼는 것은 frappe의 svg mouseup(마지막 날짜 변경) 뒤에 document에서 풀린다.
 gantt.$container.addEventListener(
   'mousedown',
-  () => {
+  (e) => {
     pointerDownOnChart = true;
     gestureRecorded = false;
+    // 자식이 있는 그룹 막대는 기간·진행률이 자동이라 끌지 못하게 frappe까지 가지 않게 한다 (클릭·더블클릭은 그대로)
+    if (e.target.closest?.('.bar-wrapper.is-locked')) e.stopPropagation();
   },
   true,
 );
 document.addEventListener('mouseup', () => {
   pointerDownOnChart = false;
+  if (redrawAfterGesture) {
+    redrawAfterGesture = false;
+    setTimeout(() => {
+      redrawChart({ keepScroll: true });
+      decorateChart();
+    });
+  }
 });
 
 // 목록과 차트의 세로 스크롤을 맞춘다. 같은 값이면 scroll 이벤트가 다시 나지 않아 서로 무한히 부르지 않는다
@@ -676,17 +722,30 @@ rowsEl.addEventListener('click', (e) => {
   const row = e.target.closest('.task-row');
   if (!row) return;
   const action = e.target.closest('[data-action]')?.dataset.action;
-  if (action === 'edit') openEdit(row.dataset.id);
+  if (action === 'toggle') toggleGroup(row.dataset.id);
+  else if (action === 'edit') openEdit(row.dataset.id);
   else if (action === 'duplicate') duplicate(row.dataset.id);
   else if (action === 'delete') requestDelete(row.dataset.id);
   else selectTask(row.dataset.id, { scrollChart: true });
 });
 
-// 태스크를 목록의 to 자리로 옮긴다 (차트 순서도 같이 바뀐다)
-function reorderTask(id, to) {
-  const from = tasks.findIndex((t) => t.id === id);
-  if (from === -1 || to === from || to < 0 || to >= tasks.length) return false;
-  commit(moveItem(tasks, from, to), { label: `Reorder “${tasks[from].name}”` });
+// 그룹 접기/펴기. 보기 상태라 실행 취소 이력에는 남기지 않고 저장만 한다
+function toggleGroup(id, open) {
+  const group = tasks.find((t) => t.id === id);
+  if (!group || !isGroup(group)) return;
+  const collapsed = open === undefined ? !group.collapsed : !open;
+  if (Boolean(group.collapsed) === collapsed) return;
+  // 숨겨지는 자식이 선택돼 있었으면 그룹을 선택한다
+  if (collapsed && tasks.some((t) => t.id === selectedId && t.parent === id)) selectedId = id;
+  commit(tasks.map((t) => (t.id === id ? { ...t, collapsed } : t)));
+  rowsEl.querySelector(`.task-row[data-id="${CSS.escape(id)}"]`)?.focus();
+}
+
+// 순서를 바꾼 목록을 반영한다 (차트 순서도 같이 바뀐다)
+function applyReorder(id, next) {
+  // 제자리에 놓은 경우는 이력에 남기지 않는다
+  if (!next || next.every((t, i) => t.id === tasks[i].id)) return false;
+  commit(next, { label: `Reorder “${tasks.find((t) => t.id === id).name}”` });
   return true;
 }
 
@@ -697,19 +756,26 @@ rowsEl.addEventListener('keydown', (e) => {
     e.preventDefault();
     selectTask(id, { scrollChart: true });
   } else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-    // Alt+↑/↓: 한 칸 옮기고, 다시 그려진 같은 행에 포커스를 돌려준다
+    // Alt+↑/↓: 같은 단계의 이웃과 자리를 바꾸고(그룹은 자식과 함께), 다시 그려진 같은 행에 포커스를 돌려준다
     e.preventDefault();
-    const index = tasks.findIndex((t) => t.id === id);
     selectedId = id;
-    if (reorderTask(id, index + (e.key === 'ArrowUp' ? -1 : 1))) {
+    if (applyReorder(id, moveSibling(tasks, id, e.key === 'ArrowUp' ? -1 : 1))) {
       rowsEl.querySelector(`.task-row[data-id="${CSS.escape(id)}"]`)?.focus();
+    }
+  } else if (!e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    // ←/→: 그룹 접기/펴기
+    const task = tasks.find((t) => t.id === id);
+    if (task && isGroup(task)) {
+      e.preventDefault();
+      toggleGroup(id, e.key === 'ArrowRight');
     }
   }
 });
 
-// 손잡이를 끌어 순서 바꾸기 (HTML 드래그 앤 드롭)
+// 손잡이를 끌어 순서 바꾸기 (HTML 드래그 앤 드롭). 그룹은 자식과 함께, 자식은 같은 그룹 안에서만 옮긴다
 let draggingId = null;
-let dropIndex = null;
+// 놓을 자리: 기준 태스크(그룹 밖이면 묶음의 머리) 앞/뒤
+let dropTarget = null;
 
 const clearDropMarks = () =>
   rowsEl.querySelectorAll('.drop-before, .drop-after').forEach((r) => r.classList.remove('drop-before', 'drop-after'));
@@ -728,33 +794,40 @@ rowsEl.addEventListener('dragstart', (e) => {
 rowsEl.addEventListener('dragover', (e) => {
   const row = e.target.closest('.task-row');
   if (!draggingId || !row) return;
+  clearDropMarks();
+  dropTarget = null;
+  const anchor = dropAnchor(tasks, draggingId, row.dataset.id);
+  // 놓을 수 없는 자리(다른 그룹 안 등)면 preventDefault를 하지 않아 브라우저가 '놓을 수 없음'으로 보여 준다
+  if (!anchor) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
-  const rect = row.getBoundingClientRect();
-  const before = e.clientY < rect.top + rect.height / 2;
-  clearDropMarks();
-  row.classList.add(before ? 'drop-before' : 'drop-after');
-  const index = tasks.findIndex((t) => t.id === row.dataset.id);
-  dropIndex = before ? index : index + 1;
+  // 그룹 밖 태스크를 옮길 때는 펼친 그룹 묶음(그룹 + 보이는 자식) 전체의 위/아래 절반으로 앞뒤를 정한다
+  const head = rowsEl.querySelector(`.task-row[data-id="${CSS.escape(anchor)}"]`);
+  const draggedIsChild = Boolean(tasks.find((t) => t.id === draggingId)?.parent);
+  const kids = draggedIsChild ? [] : [...rowsEl.querySelectorAll(`.task-row[data-parent="${CSS.escape(anchor)}"]`)];
+  const last = kids.at(-1) ?? head;
+  const top = head.getBoundingClientRect().top;
+  const bottom = last.getBoundingClientRect().bottom;
+  const after = e.clientY >= (top + bottom) / 2;
+  (after ? last : head).classList.add(after ? 'drop-after' : 'drop-before');
+  dropTarget = { anchor, after };
 });
 
 rowsEl.addEventListener('drop', (e) => {
-  if (!draggingId || dropIndex === null) return;
+  if (!draggingId || !dropTarget) return;
   e.preventDefault();
-  const from = tasks.findIndex((t) => t.id === draggingId);
-  // 자기 자리보다 아래에 놓으면, 꺼낸 만큼 한 칸 당겨진다
-  const to = dropIndex > from ? dropIndex - 1 : dropIndex;
   const id = draggingId;
+  const { anchor, after } = dropTarget;
   // 목록을 다시 그리면 끌던 행이 사라져 dragend가 목록까지 오지 않으므로 여기서 정리한다
   draggingId = null;
-  dropIndex = null;
+  dropTarget = null;
   clearDropMarks();
-  reorderTask(id, to);
+  applyReorder(id, moveNextTo(tasks, id, anchor, after));
 });
 
 rowsEl.addEventListener('dragend', () => {
   draggingId = null;
-  dropIndex = null;
+  dropTarget = null;
   clearDropMarks();
   rowsEl.querySelector('.is-dragging')?.classList.remove('is-dragging');
 });
@@ -778,5 +851,5 @@ document.getElementById('fit-names-btn').addEventListener('click', () => listRes
 setProjectName(currentProject().name, { save: false });
 // 예전 데이터에서 옮겨 온 경우 새 형식으로 바로 저장해 둔다 (예전 키는 그대로 남는다)
 saveProjectsState({ projects, currentId });
-renderTaskList(tasks, selectedId);
+renderList();
 updateZoomControls();

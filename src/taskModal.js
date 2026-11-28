@@ -12,15 +12,23 @@ const deleteBtn = document.getElementById('delete-btn');
 const colorOptions = document.getElementById('color-options');
 const durationHint = document.getElementById('duration-hint');
 const startLabel = document.getElementById('start-label');
+const parentSelect = document.getElementById('parent-select');
 
 let current = null;
 
-// 종류에 따라 보이는 칸이 달라진다 (마일스톤: 종료일·진행률 대신 날짜 하나와 Done)
+const TYPE_WORD = { task: 'task', milestone: 'milestone', group: 'group' };
+
+// 종류에 따라 보이는 칸이 달라진다
+// - 마일스톤: 종료일·진행률 대신 날짜 하나와 Done
+// - 그룹: 소속 그룹·선행 태스크 없음. 자식이 있으면 날짜·진행률은 자식으로 계산돼 고칠 수 없다
 function applyType() {
   const type = form.elements.type.value;
   form.dataset.type = type;
   startLabel.textContent = type === 'milestone' ? 'Date' : 'Start date';
-  titleEl.textContent = `${current.isNew ? 'Add' : 'Edit'} ${type === 'milestone' ? 'milestone' : 'task'}`;
+  titleEl.textContent = `${current.isNew ? 'Add' : 'Edit'} ${TYPE_WORD[type]}`;
+  const auto = type === 'group' && current.childCount > 0;
+  for (const name of ['start', 'end', 'progress']) form.elements[name].disabled = auto;
+  updateDurationHint();
 }
 form.querySelectorAll('input[name="type"]').forEach((input) => input.addEventListener('change', applyType));
 
@@ -61,7 +69,8 @@ function dependentsOf(id, tasks) {
 function renderDependencyOptions(task, tasks, isNew) {
   const blocked = isNew ? new Set() : dependentsOf(task.id, tasks);
   const selected = parseDeps(task.dependencies);
-  const candidates = tasks.filter((t) => t.id !== task.id);
+  // 그룹은 선행 태스크가 될 수 없다 (기간이 자식으로 정해져서)
+  const candidates = tasks.filter((t) => t.id !== task.id && t.type !== 'group');
 
   if (!candidates.length) {
     const p = document.createElement('p');
@@ -101,9 +110,18 @@ function renderDependencyOptions(task, tasks, isNew) {
  * @param {() => Promise<boolean>} [opts.onDelete] 실제로 삭제했으면 true
  */
 export function openTaskModal({ task, isNew, tasks, onSave, onDelete }) {
-  current = { onSave, onDelete, isNew };
+  current = { onSave, onDelete, isNew, childCount: isNew ? 0 : tasks.filter((t) => t.parent === task.id).length };
 
-  form.elements.type.value = task.type === 'milestone' ? 'milestone' : 'task';
+  form.elements.type.value = task.type === 'milestone' || task.type === 'group' ? task.type : 'task';
+  // 소속 그룹 후보: 이 태스크가 아닌 그룹들
+  const groups = tasks.filter((t) => t.type === 'group' && t.id !== task.id);
+  parentSelect.replaceChildren(
+    new Option('No group', ''),
+    ...groups.map((g) => new Option(g.name, g.id)),
+  );
+  parentSelect.value = groups.some((g) => g.id === task.parent) ? task.parent : '';
+  parentSelect.disabled = !groups.length;
+  parentSelect.title = groups.length ? '' : 'Add a task with the type “Group” first.';
   form.elements.name.value = task.name;
   form.elements.start.value = task.start;
   form.elements.end.value = task.end;
@@ -125,6 +143,15 @@ export function openTaskModal({ task, isNew, tasks, onSave, onDelete }) {
 // 날짜 아래에 기간과 근무일(주말·공휴일 제외)을 보여 준다
 function updateDurationHint() {
   const { start, end } = form.elements;
+  if (form.dataset.type === 'milestone') {
+    durationHint.textContent = '';
+    return;
+  }
+  if (form.dataset.type === 'group' && current?.childCount) {
+    const n = current.childCount;
+    durationHint.textContent = `Dates and progress follow its ${n} ${n === 1 ? 'task' : 'tasks'}.`;
+    return;
+  }
   if (!start.value || !end.value || end.value < start.value) {
     durationHint.textContent = '';
     return;
@@ -144,7 +171,9 @@ function showError(message, field) {
 form.addEventListener('submit', (e) => {
   e.preventDefault();
   const { name, start, end, progress, done } = form.elements;
-  const milestone = form.elements.type.value === 'milestone';
+  const type = form.elements.type.value;
+  const milestone = type === 'milestone';
+  const group = type === 'group';
   const progressValue = milestone ? (done.checked ? 100 : 0) : Number(progress.value);
 
   if (!name.value.trim()) return showError('Enter a name.', name);
@@ -158,14 +187,16 @@ form.addEventListener('submit', (e) => {
   }
 
   current.onSave({
-    type: milestone ? 'milestone' : 'task',
+    type,
+    // 그룹은 다른 그룹에 들어갈 수 없고 선행 태스크도 없다
+    parent: group ? '' : form.elements.parent.value,
     name: name.value.trim(),
     start: start.value,
     end: milestone ? start.value : end.value,
     progress: progressValue,
     color: form.elements.color.value,
     notes: form.elements.notes.value,
-    dependencies: joinDeps([...form.querySelectorAll('input[name="dependencies"]:checked')].map((i) => i.value)),
+    dependencies: group ? '' : joinDeps([...form.querySelectorAll('input[name="dependencies"]:checked')].map((i) => i.value)),
   });
   dialog.close();
 });

@@ -15,6 +15,9 @@ const MIN_SCALE = 0.75;
 // 화면과 같은 치수: 행 40px, 막대 24px
 const L = { pad: 32, titleH: 72, headUpper: 32, headLower: 32, rowH: 40, barH: 24, cell: 16, gap: 12, dateW: 96, progressW: 100 };
 
+// 그룹 자식의 이름 들여쓰기
+const INDENT = 16;
+
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 // 태스크 색은 CSS(.c-<키>)에만 있으므로 임시 요소로 읽는다
@@ -116,15 +119,17 @@ export async function exportPng({ tasks, projectName, mode, columnWidth, now = n
     ...tl.groups.map((g) => g.label),
   ].join('');
   await Promise.all(
-    [font(400, 12), font(500, 12), font(400, 13), font(500, 13), font(600, 20)].map((f) => document.fonts.load(f, allText)),
+    [font(400, 12), font(500, 12), font(700, 12), font(400, 13), font(500, 13), font(600, 13), font(600, 20)].map((f) =>
+      document.fonts.load(f, allText),
+    ),
   );
 
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
 
-  // 목록의 이름 칸은 가장 긴 이름에 맞추되 160~320px
+  // 목록의 이름 칸은 가장 긴 이름(그룹 자식은 들여쓰기 포함)에 맞추되 160~320px
   ctx.font = font(400, 13);
-  const longest = Math.max(...tasks.map((t) => ctx.measureText(t.name).width));
+  const longest = Math.max(...tasks.map((t) => ctx.measureText(t.name).width + (t.parent ? INDENT : 0)));
   const nameW = Math.min(320, Math.max(160, Math.ceil(longest) + 18));
   const listW = L.cell + nameW + L.gap + L.dateW + L.gap + L.dateW + L.gap + L.progressW + L.cell;
 
@@ -228,16 +233,17 @@ export async function exportPng({ tasks, projectName, mode, columnWidth, now = n
     line(ctx, tx, rowTop + L.rowH, tx + tableW, rowTop + L.rowH, c.hairline);
 
     const color = taskColors[t.color];
+    const indent = t.parent ? INDENT : 0;
     ctx.fillStyle = color;
     ctx.beginPath();
-    if (t.type === 'milestone') diamond(ctx, colName + 5, mid, 6);
-    else ctx.roundRect(colName, mid - 5, 10, 10, 3);
+    if (t.type === 'milestone') diamond(ctx, colName + indent + 5, mid, 6);
+    else ctx.roundRect(colName + indent, mid - 5, 10, 10, 3);
     ctx.fill();
 
     ctx.textAlign = 'left';
-    ctx.font = font(400, 13);
+    ctx.font = font(t.type === 'group' ? 600 : 400, 13);
     ctx.fillStyle = c.text;
-    ctx.fillText(ellipsize(ctx, t.name, nameW - 18), colName + 18, mid);
+    ctx.fillText(ellipsize(ctx, t.name, nameW - 18 - indent), colName + indent + 18, mid);
     ctx.fillStyle = c.text2;
     ctx.fillText(formatDate(t.start), colStart, mid);
     // 늦은 태스크는 화면처럼 종료일을 빨강(기한 지남)·주황(뒤처짐)으로
@@ -322,10 +328,13 @@ export async function exportPng({ tasks, projectName, mode, columnWidth, now = n
       continue;
     }
 
+    // 그룹 막대는 화면처럼 각진 모서리, 조금 진한 바탕과 테두리, 굵은 이름
+    const group = t.type === 'group';
+    const radius = group ? 1 : 4;
     ctx.save();
     ctx.beginPath();
-    ctx.roundRect(x1, top, width, L.barH, 4);
-    ctx.fillStyle = mix(color, c.bg, 0.28);
+    ctx.roundRect(x1, top, width, L.barH, radius);
+    ctx.fillStyle = mix(color, c.bg, group ? 0.4 : 0.28);
     ctx.fill();
     ctx.clip();
     ctx.fillStyle = mix(color, c.bg, 0.52);
@@ -333,12 +342,12 @@ export async function exportPng({ tasks, projectName, mode, columnWidth, now = n
     ctx.restore();
 
     ctx.beginPath();
-    ctx.roundRect(x1 + 0.5, top + 0.5, width - 1, L.barH - 1, 4);
-    ctx.strokeStyle = mix(color, c.bg, 0.6);
-    ctx.lineWidth = 1;
+    ctx.roundRect(x1 + 0.5, top + 0.5, width - 1, L.barH - 1, radius);
+    ctx.strokeStyle = mix(color, c.bg, group ? 0.75 : 0.6);
+    ctx.lineWidth = group ? 1.5 : 1;
     ctx.stroke();
 
-    ctx.font = font(500, 12);
+    ctx.font = font(group ? 700 : 500, 12);
     const labelW = ctx.measureText(t.name).width;
     if (labelW + 16 <= width) {
       ctx.textAlign = 'center';
