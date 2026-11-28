@@ -22,13 +22,16 @@ const chevronIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 
  * @param {object[]} opts.all 지금 프로젝트의 모든 태스크 (개수·자식 수 계산용)
  * @param {string | null} opts.selectedId
  * @param {boolean} opts.canReorder 끌어서 순서 바꾸기를 보여 줄지 (필터 중에는 끔)
+ * @param {boolean} [opts.filtered] 검색·필터 중이면 "3 of 18 tasks"
  * @param {string} [opts.today] "YYYY-MM-DD"
  */
-export function renderTaskList({ rows, all, selectedId, canReorder, today = toISODate(new Date()) }) {
+export function renderTaskList({ rows, all, selectedId, canReorder, filtered = false, today = toISODate(new Date()) }) {
   // 개수와 늦은 태스크 수는 그룹을 빼고 센다 (그룹 상태는 자식에서 나오므로 두 번 세지 않게)
   const items = all.filter((t) => t.type !== 'group');
   const late = items.filter((t) => isLate(scheduleStatus(t, today))).length;
-  countEl.textContent = plural(items.length, 'task') + (late ? ` · ${late} late` : '');
+  const shown = rows.filter((t) => t.type !== 'group').length;
+  countEl.textContent =
+    (filtered ? `${shown} of ${plural(items.length, 'task')}` : plural(items.length, 'task')) + (late ? ` · ${late} late` : '');
   countEl.classList.toggle('has-late', late > 0);
 
   if (!rows.length) {

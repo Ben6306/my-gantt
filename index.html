@@ -106,6 +106,25 @@
         <div class="board-body">
           <section class="task-list" aria-label="Tasks">
             <div class="list-head">
+              <div class="list-tools">
+                <label class="search">
+                  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
+                  <input id="search-input" type="search" placeholder="Search names and notes" autocomplete="off" spellcheck="false" aria-label="Search tasks" />
+                </label>
+                <button type="button" id="filter-btn" class="btn-ghost btn-sm" popovertarget="filter-menu" aria-haspopup="true" aria-expanded="false">
+                  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z" /></svg>
+                  <span id="filter-label">Filter</span>
+                </button>
+                <div id="filter-menu" class="project-menu filter-menu" popover>
+                  <label class="menu-check"><input type="checkbox" id="filter-done" /> Hide completed</label>
+                  <label class="menu-check"><input type="checkbox" id="filter-late" /> Only late (overdue or behind)</label>
+                  <p class="project-menu-label">Colors</p>
+                  <div id="filter-colors" class="color-options filter-colors"></div>
+                  <div class="project-menu-actions">
+                    <button type="button" id="filter-clear" class="menu-action">Clear search and filters</button>
+                  </div>
+                </div>
+              </div>
               <span class="list-head-task">
                 Task
                 <button

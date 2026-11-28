@@ -12,7 +12,7 @@ import { confirmDialog } from './confirmDialog.js';
 import { backupFileName, buildBackup, parseBackup } from './backup.js';
 import { showToast } from './toast.js';
 import { addDays, escapeHTML, formatDate, joinDeps, parseDeps, parseISODate, plural, toISODate } from './utils.js';
-import { colorFor, isColorKey } from './colors.js';
+import { TASK_COLORS, colorFor, isColorKey } from './colors.js';
 import { DEFAULT_ZOOM, MODE_DEFAULT_ZOOM, ZOOM_LEVELS, fitZoom, spanDays } from './zoom.js';
 import { exportPng } from './exportPng.js';
 import { createHistory } from './history.js';
@@ -103,8 +103,30 @@ const projectNameInput = document.getElementById('project-name');
 
 const nextId = () => String(Math.max(0, ...tasks.map((t) => Number(t.id)).filter(Number.isFinite)) + 1);
 
-// 목록·차트에 보이는 행 (접힌 그룹의 자식은 숨김)
-const shownTasks = () => visibleTasks(tasks);
+// 검색·필터 (메모리에만 두고 저장하지 않는다)
+const filters = { query: '', hideDone: false, lateOnly: false, colors: new Set() };
+const isFiltering = () => Boolean(filters.query || filters.hideDone || filters.lateOnly || filters.colors.size);
+
+// 태스크가 검색·필터에 맞는지. 그룹은 자식을 통해 보이고(visibleTasks), 자식 없는 그룹만 스스로 판단한다.
+// 검색어는 이름·메모, 그리고 소속 그룹 이름에서도 찾는다 (그룹 이름으로 찾으면 그 안의 태스크가 나오게)
+function taskMatcher() {
+  const query = filters.query.toLowerCase();
+  const today = toISODate(new Date());
+  const names = new Map(tasks.map((t) => [t.id, t.name]));
+  const counts = childCounts(tasks);
+  return (t) => {
+    if (isGroup(t) && counts.has(t.id)) return false;
+    const text = `${t.name}\n${t.notes ?? ''}\n${t.parent ? names.get(t.parent) : ''}`.toLowerCase();
+    if (query && !text.includes(query)) return false;
+    if (filters.hideDone && t.progress >= 100) return false;
+    if (filters.lateOnly && !isLate(scheduleStatus(t, today))) return false;
+    if (filters.colors.size && !filters.colors.has(t.color)) return false;
+    return true;
+  };
+}
+
+// 목록·차트에 보이는 행 (접힌 그룹의 자식, 검색·필터에 안 맞는 행은 숨김)
+const shownTasks = () => visibleTasks(tasks, isFiltering() ? taskMatcher() : null);
 
 // 막대 색은 custom_class(.c-<색>)로 style.css에서 입힌다.
 // color는 넘기지 않는다: frappe-gantt가 task.color를 막대 fill에 그대로 넣어서 'blue'·'red'가 원색으로 칠해진다.
@@ -119,8 +141,9 @@ function chartTasks() {
   }));
 }
 
+// 필터 중에는 일부만 보여서 끌어 놓을 자리가 모호하므로 순서 바꾸기를 끈다
 function renderList() {
-  renderTaskList({ rows: shownTasks(), all: tasks, selectedId, canReorder: true });
+  renderTaskList({ rows: shownTasks(), all: tasks, selectedId, canReorder: !isFiltering(), filtered: isFiltering() });
 }
 
 function setProjectName(name, { save = true, label } = {}) {
@@ -758,6 +781,10 @@ rowsEl.addEventListener('keydown', (e) => {
   } else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
     // Alt+↑/↓: 같은 단계의 이웃과 자리를 바꾸고(그룹은 자식과 함께), 다시 그려진 같은 행에 포커스를 돌려준다
     e.preventDefault();
+    if (isFiltering()) {
+      showToast('Clear the search and filters to reorder tasks.');
+      return;
+    }
     selectedId = id;
     if (applyReorder(id, moveSibling(tasks, id, e.key === 'ArrowUp' ? -1 : 1))) {
       rowsEl.querySelector(`.task-row[data-id="${CSS.escape(id)}"]`)?.focus();
@@ -838,6 +865,85 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
     // 등록에 실패해도(사생활 보호 모드 등) 앱은 온라인으로 그대로 쓸 수 있다
   });
 }
+
+// 검색·필터 UI
+const searchInput = document.getElementById('search-input');
+const filterBtn = document.getElementById('filter-btn');
+const filterMenu = document.getElementById('filter-menu');
+const filterColors = document.getElementById('filter-colors');
+
+filterColors.replaceChildren(
+  ...TASK_COLORS.map(({ key, name }) => {
+    const label = document.createElement('label');
+    label.className = `swatch c-${key}`;
+    label.title = name;
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.value = key;
+    input.setAttribute('aria-label', name);
+    const dot = document.createElement('span');
+    dot.className = 'swatch-dot';
+    label.append(input, dot);
+    return label;
+  }),
+);
+
+function applyFilters() {
+  const count = (filters.hideDone ? 1 : 0) + (filters.lateOnly ? 1 : 0) + (filters.colors.size ? 1 : 0);
+  document.getElementById('filter-label').textContent = count ? `Filter · ${count}` : 'Filter';
+  filterBtn.classList.toggle('is-active', count > 0);
+  filterColors.classList.toggle('has-selection', filters.colors.size > 0);
+  renderList();
+  redrawChart({ keepScroll: true });
+  decorateChart();
+}
+
+searchInput.addEventListener('input', () => {
+  filters.query = searchInput.value.trim();
+  applyFilters();
+});
+searchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && searchInput.value) {
+    e.stopPropagation();
+    searchInput.value = '';
+    filters.query = '';
+    applyFilters();
+  }
+});
+document.getElementById('filter-done').addEventListener('change', (e) => {
+  filters.hideDone = e.target.checked;
+  applyFilters();
+});
+document.getElementById('filter-late').addEventListener('change', (e) => {
+  filters.lateOnly = e.target.checked;
+  applyFilters();
+});
+filterColors.addEventListener('change', (e) => {
+  if (e.target.checked) filters.colors.add(e.target.value);
+  else filters.colors.delete(e.target.value);
+  applyFilters();
+});
+document.getElementById('filter-clear').addEventListener('click', () => {
+  filters.query = '';
+  filters.hideDone = false;
+  filters.lateOnly = false;
+  filters.colors.clear();
+  searchInput.value = '';
+  filterMenu.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+    input.checked = false;
+  });
+  filterMenu.hidePopover();
+  applyFilters();
+});
+filterMenu.addEventListener('toggle', (e) => {
+  const open = e.newState === 'open';
+  filterBtn.setAttribute('aria-expanded', String(open));
+  if (open) {
+    const r = filterBtn.getBoundingClientRect();
+    filterMenu.style.top = `${r.bottom + 6}px`;
+    filterMenu.style.left = `${Math.max(8, r.right - filterMenu.offsetWidth)}px`;
+  }
+});
 
 const listResizer = initListResizer({
   board: document.querySelector('.board'),
