@@ -12,6 +12,11 @@ const deleteBtn = document.getElementById('delete-btn');
 const colorOptions = document.getElementById('color-options');
 const durationHint = document.getElementById('duration-hint');
 const startLabel = document.getElementById('start-label');
+const actualEndLabel = document.getElementById('actual-end-label');
+const todayISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 const parentSelect = document.getElementById('parent-select');
 const nameInput = form.elements.name;
 
@@ -25,10 +30,11 @@ const TYPE_WORD = { task: 'task', milestone: 'milestone', group: 'group' };
 function applyType() {
   const type = form.elements.type.value;
   form.dataset.type = type;
-  startLabel.textContent = type === 'milestone' ? 'Date' : 'Start date';
+  startLabel.textContent = type === 'milestone' ? 'Date' : 'Start';
+  actualEndLabel.textContent = type === 'milestone' ? 'Done on' : 'Actual end';
   titleEl.textContent = `${current.isNew ? 'Add' : 'Edit'} ${TYPE_WORD[type]}`;
   const auto = type === 'group' && current.childCount > 0;
-  for (const name of ['start', 'end', 'progress']) form.elements[name].disabled = auto;
+  for (const name of ['start', 'end', 'progress', 'actualStart', 'actualEnd']) form.elements[name].disabled = auto;
   updateDurationHint();
 }
 form.querySelectorAll('input[name="type"]').forEach((input) => input.addEventListener('change', applyType));
@@ -130,6 +136,8 @@ export function openTaskModal({ task, isNew, tasks, onSave, onDelete }) {
   form.elements.end.value = task.end;
   form.elements.progress.value = task.progress;
   form.elements.done.checked = task.progress >= 100;
+  form.elements.actualStart.value = task.actualStart ?? '';
+  form.elements.actualEnd.value = task.actualEnd ?? '';
   form.elements.notes.value = task.notes ?? '';
   form.elements.color.value = task.color;
   renderDependencyOptions(task, tasks, isNew);
@@ -153,7 +161,7 @@ function updateDurationHint() {
   }
   if (form.dataset.type === 'group' && current?.childCount) {
     const n = current.childCount;
-    durationHint.textContent = `Dates and progress follow its ${n} ${n === 1 ? 'task' : 'tasks'}.`;
+    durationHint.textContent = `Dates, actual dates and progress follow its ${n} ${n === 1 ? 'task' : 'tasks'}.`;
     return;
   }
   if (!start.value || !end.value || end.value < start.value) {
@@ -165,6 +173,17 @@ function updateDurationHint() {
   durationHint.textContent = `${days} ${days === 1 ? 'day' : 'days'} · ${work} working ${work === 1 ? 'day' : 'days'}`;
 }
 form.elements.start.addEventListener('input', updateDurationHint);
+// 실제 종료(마일스톤은 완료일)를 넣으면 끝난 것: 진행률 100%, Done 체크. Done을 체크하면 완료일이 오늘
+form.elements.actualEnd.addEventListener('input', () => {
+  const { actualEnd, progress, done } = form.elements;
+  done.checked = Boolean(actualEnd.value);
+  if (actualEnd.value && Number(progress.value) < 100) progress.value = 100;
+});
+form.elements.done.addEventListener('change', () => {
+  const { actualEnd, done } = form.elements;
+  if (done.checked && !actualEnd.value) actualEnd.value = todayISO();
+  if (!done.checked) actualEnd.value = '';
+});
 form.elements.end.addEventListener('input', updateDurationHint);
 
 // 이름은 여러 줄로 보이지만 한 줄짜리 값이다: Enter는 저장, 붙여 넣은 줄바꿈은 공백으로
@@ -202,7 +221,15 @@ form.addEventListener('submit', (e) => {
 
   if (!name.value.trim()) return showError('Enter a name.', name);
   if (!start.value) return showError(milestone ? 'Enter a date.' : 'Enter a start date.', start);
+  const { actualStart, actualEnd } = form.elements;
   if (!milestone) {
+    // 실제 종료만 넣었으면 계획대로 시작한 것으로 본다 (계획 시작이 실제 종료보다 늦으면 실제 종료일)
+    if (actualEnd.value && !actualStart.value) {
+      actualStart.value = start.value && start.value <= actualEnd.value ? start.value : actualEnd.value;
+    }
+    if (actualEnd.value && actualEnd.value < actualStart.value) {
+      return showError('The actual end can’t be before the actual start.', actualEnd);
+    }
     if (!end.value) return showError('Enter an end date.', end);
     if (end.value < start.value) return showError('The end date can’t be before the start date.', end);
     if (progress.value.trim() === '' || !Number.isInteger(progressValue) || progressValue < 0 || progressValue > 100) {
@@ -220,6 +247,9 @@ form.addEventListener('submit', (e) => {
     progress: progressValue,
     color: form.elements.color.value,
     notes: form.elements.notes.value,
+    // 마일스톤은 완료일 하나 (Done 체크와 함께 움직인다)
+    actualStart: milestone ? (done.checked ? actualEnd.value || todayISO() : '') : actualStart.value,
+    actualEnd: milestone ? (done.checked ? actualEnd.value || todayISO() : '') : actualEnd.value,
     dependencies: group ? '' : joinDeps([...form.querySelectorAll('input[name="dependencies"]:checked')].map((i) => i.value)),
   });
   dialog.close();

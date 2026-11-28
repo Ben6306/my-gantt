@@ -190,7 +190,7 @@
       </main>
     </div>
 
-    <dialog id="task-modal" class="modal modal-wide">
+    <dialog id="task-modal" class="modal modal-wide modal-xwide">
       <form id="task-form" method="dialog" novalidate>
         <h2 id="modal-title">Add task</h2>
 
@@ -208,14 +208,22 @@
           <textarea name="name" class="name-input" rows="1" required maxlength="200" autocomplete="off" spellcheck="false"></textarea>
         </label>
 
-        <div class="field-row">
+        <div class="field-row date-row">
           <label class="field">
-            <span id="start-label">Start date</span>
+            <span id="start-label">Start</span>
             <input name="start" type="date" required />
           </label>
           <label class="field not-milestone">
-            <span>End date</span>
+            <span>End</span>
             <input name="end" type="date" required />
+          </label>
+          <label class="field actual-field not-milestone">
+            <span>Actual start</span>
+            <input name="actualStart" type="date" />
+          </label>
+          <label class="field actual-field">
+            <span id="actual-end-label">Actual end</span>
+            <input name="actualEnd" type="date" />
           </label>
         </div>
         <p id="duration-hint" class="field-hint" aria-live="polite"></p>

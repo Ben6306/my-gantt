@@ -24,6 +24,7 @@ import { HOLIDAYS, holidayName, workingDays } from './holidays.js';
 import { isLate, scheduleStatus, statusText } from './status.js';
 import { cleanTask, isGroup, isMilestone } from './taskFields.js';
 import { baselineSlip, clearBaseline, hasBaseline, setBaseline, slipText } from './baseline.js';
+import { actualText, applyActualRules, finishTask, startTask } from './actuals.js';
 import { childCounts, dropAnchor, duplicateTask, moveNextTo, moveSibling, normalizeTree, visibleTasks } from './tree.js';
 
 const DEFAULT_PROJECT_NAME = 'Untitled project';
@@ -202,7 +203,7 @@ function decorateChart(chart = gantt) {
     if (!wrapper) continue;
     const { status } = scheduleStatus(t, today);
     wrapper.classList.toggle('is-overdue', status === 'overdue');
-    wrapper.classList.toggle('is-behind', status === 'behind');
+    wrapper.classList.toggle('is-behind', status === 'behind' || status === 'lateStart');
     wrapper.classList.toggle('is-done', t.progress >= 100);
     wrapper.classList.toggle('is-milestone', isMilestone(t));
     // 자식이 있는 그룹은 기간이 자동이라 끌 수 없게 표시 (끌기는 아래 mousedown에서 막는다)
@@ -212,16 +213,19 @@ function decorateChart(chart = gantt) {
       // 하루 폭 막대를 CSS로 정사각형으로 늘인 뒤 45° 돌려 마름모로 그린다. 막대 자체를 바꾸므로 끄는 동안에도 따라간다
       const rect = wrapper.querySelector('.bar');
       wrapper.style.setProperty('--ms-sx', String(chart.options.bar_height / Math.max(1, rect.getWidth())));
-      // 이름은 마름모 오른쪽에. frappe가 다음 프레임에 이름 위치를 다시 잡으므로(draw_label) 그 뒤에 옮긴다
+      // 이름은 마름모 오른쪽에(완료일 마름모가 더 오른쪽이면 그 뒤에). frappe가 다음 프레임에 이름 위치를 다시 잡으므로(draw_label) 그 뒤에 옮긴다
       requestAnimationFrame(() => {
         const label = wrapper.querySelector('.bar-label');
         if (!label) return;
+        const actual = wrapper.querySelector('.actual-bar');
+        const center = Math.max(rect.getX(), actual ? Number(actual.getAttribute('x')) : -Infinity) + rect.getWidth() / 2;
         label.classList.add('big');
-        label.setAttribute('x', rect.getX() + rect.getWidth() / 2 + chart.options.bar_height / 2);
+        label.setAttribute('x', center + chart.options.bar_height / 2);
       });
     }
   }
   drawBaselines(chart);
+  drawActuals(chart, today);
   chart.$svg.querySelectorAll('.holiday-highlight:not(:has(title))').forEach((rect) => {
     const iso = [...rect.classList].find((c) => /^\d{4}-\d{2}-\d{2}$/.test(c));
     const name = iso && holidayName(iso);
@@ -260,6 +264,43 @@ function drawBaselines(chart) {
     layer.append(rect);
   }
   chart.layers.bar.before(layer);
+}
+
+/*
+ * 실제 기록: 시작한 태스크는 계획 막대를 빈 점선 테두리로 바꾸고(CSS .has-actual), 실제 기간을 색이 찬 막대로 겹친다.
+ * 진행 중이면 실제 시작~오늘. 막대 묶음(.bar-group) 안, 계획 막대 바로 위·이름 아래에 넣는다.
+ * 위치는 기준선처럼 계획 막대 위치 + (실제 날짜 − 계획 날짜)의 거리.
+ */
+function drawActuals(chart, today) {
+  const x = (iso) => posAtTime(parseISODate(iso).getTime(), chart);
+  const nextDay = (iso) => toISODate(addDays(parseISODate(iso), 1));
+  for (const t of tasks) {
+    const wrapper = chart.$svg.querySelector(`.bar-wrapper[data-id="${CSS.escape(t.id)}"]`);
+    if (!wrapper) continue;
+    wrapper.querySelector('.actual-bar')?.remove();
+    wrapper.classList.toggle('has-actual', Boolean(t.actualStart));
+    if (!t.actualStart) continue;
+    const bar = wrapper.querySelector('.bar');
+    // 진행 중이면 오늘까지(시작이 오늘 뒤로 적혀 있으면 그날 하루)
+    const lastDay = t.actualEnd ?? (today < t.actualStart ? t.actualStart : today);
+    const left = bar.getX() + x(t.actualStart) - x(t.start);
+    const right = bar.getX() + bar.getWidth() + x(nextDay(lastDay)) - x(nextDay(t.end));
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('class', `actual-bar${t.actualEnd ? '' : ' is-ongoing'}`);
+    rect.setAttribute('x', String(left));
+    rect.setAttribute('y', bar.getAttribute('y'));
+    rect.setAttribute('width', String(Math.max(2, right - left)));
+    rect.setAttribute('height', bar.getAttribute('height'));
+    rect.setAttribute('rx', bar.getAttribute('rx'));
+    bar.after(rect);
+    // 막대 밖에 둔 이름(.big)이 계획보다 길어진 실제 막대에 겹치지 않게 더 늦은 끝 뒤로 옮긴다 (frappe가 다음 프레임에 이름을 다시 잡은 뒤)
+    if (!isMilestone(t) && right > bar.getX() + bar.getWidth()) {
+      requestAnimationFrame(() => {
+        const label = wrapper.querySelector('.bar-label.big');
+        if (label) label.setAttribute('x', String(right + 5));
+      });
+    }
+  }
 }
 
 // 막대가 보이게 가로로 옮기고, 세로로는 날짜 헤더에 가리거나 화면 아래로 벗어난 경우에만 옮긴다
@@ -346,7 +387,8 @@ function fitToScreen() {
 // 태스크를 바꾸는 유일한 경로: (label이 있으면) 이력 기록 → 저장 → 목록 갱신 → (필요하면) 차트 다시 그리기
 function commit(next, { redraw = true, label } = {}) {
   if (label) record(label);
-  tasks = normalizeTasks(next);
+  // 진행률을 처음 올리면 실제 시작, 100%가 되면 실제 종료를 오늘로 기록한다 (actuals.js)
+  tasks = normalizeTasks(applyActualRules(tasks, next, toISODate(new Date())));
   persist();
   renderList();
   if (redraw) redrawChart({ keepScroll: true });
@@ -491,6 +533,22 @@ function updateTask(id, changes, options) {
   commit(
     tasks.map((t) => (t.id === id ? { ...t, ...changes } : t)),
     options,
+  );
+}
+
+// 행의 Start/Finish: 오늘을 실제 시작·종료로 기록 (날짜는 모달에서 고칠 수 있다)
+function recordActual(id, action) {
+  const task = tasks.find((t) => t.id === id);
+  if (!task) return;
+  const today = toISODate(new Date());
+  const next = action === 'start' ? startTask(task, today) : finishTask(task, today);
+  selectedId = id;
+  updateTask(id, next, { label: `${action === 'start' ? 'Start' : 'Finish'} “${task.name}”` });
+  rowsEl.querySelector(`.task-row[data-id="${CSS.escape(id)}"]`)?.focus();
+  showToast(
+    action === 'start'
+      ? `Started “${task.name}” today. Change the date in the task if it started another day.`
+      : `Marked “${task.name}” done today (100%). Change the date in the task if it finished another day.`,
   );
 }
 
@@ -683,9 +741,16 @@ const gantt = new Gantt('#gantt', chartTasks(), {
     const late = isLate(status) ? `<br/><span class="popup-late is-${status.status}">${statusText(status, progress)}</span>` : '';
     const original = tasks.find((t) => t.id === task.id);
     const kids = childCounts(tasks).get(task.id) ?? 0;
-    let when = `${formatDate(startISO)} – ${formatDate(endISO)} (${plural(task.actual_duration, 'day')}, ${work} working)<br/>Progress ${progress}%`;
-    if (original && isMilestone(original)) when = `Milestone · ${formatDate(startISO)}<br/>${progress >= 100 ? 'Done' : 'Not done'}`;
+    let when = `Plan ${formatDate(startISO)} – ${formatDate(endISO)} (${plural(task.actual_duration, 'day')}, ${work} working)<br/>Progress ${progress}%`;
+    if (original && isMilestone(original)) when = `Milestone · plan ${formatDate(startISO)}<br/>${progress >= 100 ? 'Done' : 'Not done'}`;
     else if (original && isGroup(original)) when = `Group of ${plural(kids, 'task')}<br/>${when}`;
+    // 실제 기록: "Actual Nov 28 – Dec 1 · started 1 day late · finished 1 day late"
+    if (original?.actualStart) {
+      const range = isMilestone(original)
+        ? formatDate(original.actualEnd)
+        : `${formatDate(original.actualStart)} – ${original.actualEnd ? formatDate(original.actualEnd) : 'now'}`;
+      when += `<br/><span class="popup-actual">Actual ${range} · ${actualText(original)}</span>`;
+    }
     const slip = original && baselineSlip(original);
     const baseline = slip
       ? `<br/><span class="popup-baseline">Baseline ${formatDate(original.baselineStart)} – ${formatDate(original.baselineEnd)} · ${slipText(slip)}</span>`
@@ -993,6 +1058,7 @@ rowsEl.addEventListener('click', (e) => {
   if (!row) return;
   const action = e.target.closest('[data-action]')?.dataset.action;
   if (action === 'toggle') toggleGroup(row.dataset.id);
+  else if (action === 'start' || action === 'finish') recordActual(row.dataset.id, action);
   else if (action === 'edit') openEdit(row.dataset.id);
   else if (action === 'duplicate') duplicate(row.dataset.id);
   else if (action === 'delete') requestDelete(row.dataset.id);

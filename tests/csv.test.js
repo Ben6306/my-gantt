@@ -9,11 +9,12 @@ const tasks = [
   { id: '2', name: 'Design, v2 "final"', start: '2026-12-01', end: '2026-12-05', progress: 80, dependencies: '', color: 'blue', parent: '1', notes: 'line 1\nline 2' },
   { id: '3', name: '=SUM(A1)', start: '2026-12-06', end: '2026-12-10', progress: 0, dependencies: '2', color: 'pink', parent: '1', baselineStart: '2026-12-05', baselineEnd: '2026-12-08' },
   { id: '4', name: 'Launch', start: '2026-12-11', end: '2026-12-11', progress: 0, dependencies: '3', color: 'orange', type: 'milestone' },
+  { id: '5', name: 'Wipe down', start: '2026-12-01', end: '2026-12-02', progress: 100, dependencies: '', color: 'green', actualStart: '2026-12-02', actualEnd: '2026-12-03' },
 ];
 
 test('내보낸 CSV를 다시 읽으면 같은 태스크가 나온다 (쉼표·따옴표·줄바꿈·수식 같은 이름 포함)', () => {
   const csv = tasksToCSV(tasks);
-  assert.match(csv.split('\r\n')[0], /^id,name,type,group,start,end,progress,dependencies,color,notes,baseline_start,baseline_end$/);
+  assert.match(csv.split('\r\n')[0], /^id,name,type,group,start,end,progress,dependencies,color,notes,baseline_start,baseline_end,actual_start,actual_end$/);
   assert.match(csv, /"Design, v2 ""final"""/);
   assert.match(csv, /'=SUM\(A1\)/); // 엑셀이 수식으로 실행하지 않게
   const { tasks: back, droppedDeps } = parseTaskList(csvToTasks(csv));

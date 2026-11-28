@@ -1,5 +1,5 @@
-// 왼쪽 태스크 목록 패널을 그리는 모듈 (그룹 접기·들여쓰기, 행마다 수정/복제/삭제 버튼, 선택 행 강조)
-import { escapeHTML, formatDate, plural, toISODate } from './utils.js';
+// 왼쪽 태스크 목록 패널을 그리는 모듈 (그룹 접기·들여쓰기, 계획/실제 날짜, 행마다 시작·완료/수정/복제/삭제 버튼, 선택 행 강조)
+import { escapeHTML, formatDate, parseISODate, plural, toISODate } from './utils.js';
 import { isLate, scheduleStatus, statusText } from './status.js';
 import { childCounts } from './tree.js';
 
@@ -14,7 +14,36 @@ const copyIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect width="14" h
 const deleteIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>`;
 const noteIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9.5 8h5"/><path d="M9.5 12H16"/><path d="M9.5 16H14"/></svg>`;
 const alertIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>`;
+// lucide play, check
+const playIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>`;
+const checkIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
 const chevronIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>`;
+
+const shortDate = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
+const formatShort = (iso) => shortDate.format(parseISODate(iso));
+
+/**
+ * 날짜 칸: 실제 날짜가 기록돼 있으면 실제 날짜(밝게), 계획과 다르면 아래 줄에 작게 "plan Nov 27".
+ * 기록이 없으면 계획 날짜(흐리게). warn이 있으면 앞에 경고 아이콘과 설명
+ */
+function dateCell(label, plan, actual, warn, word = label) {
+  const shown = actual ?? plan;
+  const titleParts = [actual ? `Actual ${word} ${formatDate(actual)}${actual !== plan ? ` · planned ${formatDate(plan)}` : ''}` : `Planned ${word} ${formatDate(plan)}`];
+  if (warn) titleParts.unshift(warn);
+  const icon = warn ? `<span class="late-icon">${alertIcon}</span>` : '';
+  const sr = `<span class="sr-only">${escapeHTML(titleParts.join('. '))}. </span>`;
+  const planLine = actual && actual !== plan ? `<span class="plan-date" aria-hidden="true">plan ${formatShort(plan)}</span>` : '';
+  return `<span class="task-date task-${label}${actual ? ' is-actual' : ''}${warn ? ' has-warning' : ''}" title="${escapeHTML(titleParts.join('\n'))}">${sr}<span class="date-main" aria-hidden="true">${icon}${formatDate(shown)}</span>${planLine}</span>`;
+}
+
+// 시작·완료 기록 단추: 시작 전이면 Start, 시작했으면 Finish, 끝났거나 자식이 있는 그룹이면 없음
+function progressAction(task, name, hasKids) {
+  if ((task.type === 'group' && hasKids) || task.progress >= 100) return '';
+  if (task.type === 'milestone' || task.actualStart) {
+    return `<button type="button" class="icon-btn" data-action="finish" aria-label="Mark ${name} done today" title="Done today — record today as the actual end (100%)">${checkIcon}</button>`;
+  }
+  return `<button type="button" class="icon-btn" data-action="start" aria-label="Start ${name} today" title="Start today — record today as the actual start">${playIcon}</button>`;
+}
 
 /**
  * @param {object} opts
@@ -51,8 +80,9 @@ export function renderTaskList({ rows, all, selectedId, canReorder, filtered = f
       const selected = task.id === selectedId;
       const status = scheduleStatus(task, today);
       const late = isLate(status);
-      const lateText = escapeHTML(statusText(status, task.progress));
+      const lateText = statusText(status, task.progress);
       const group = task.type === 'group';
+      const milestone = task.type === 'milestone';
       const kids = counts.get(task.id) ?? 0;
       const classes = [
         'task-row',
@@ -77,13 +107,14 @@ export function renderTaskList({ rows, all, selectedId, canReorder, filtered = f
         <li class="${classes.join(' ')}" data-id="${escapeHTML(task.id)}"${task.parent ? ` data-parent="${escapeHTML(task.parent)}"` : ''} tabindex="0"${selected ? ' aria-current="true"' : ''}${group && kids ? ` aria-expanded="${!task.collapsed}"` : ''}>
           ${handle}
           <span class="task-name" title="${tooltip}">${toggle}<span class="color-dot"></span><span class="task-name-text">${name}</span>${task.notes ? `<span class="note-icon" aria-label="Has notes">${noteIcon}</span>` : ''}</span>
-          <span class="task-date">${formatDate(task.start)}</span>
-          <span class="task-date task-end"${late ? ` title="${lateText}"` : ''}>${late ? `<span class="late-icon">${alertIcon}</span><span class="sr-only">${lateText}. </span>` : ''}${formatDate(task.end)}</span>
+          ${dateCell('start', task.start, milestone ? undefined : task.actualStart, status.status === 'lateStart' ? lateText : '', milestone ? 'date' : 'start')}
+          ${dateCell('end', task.end, task.actualEnd, late && status.status !== 'lateStart' ? lateText : '', milestone ? 'done date' : 'end')}
           <span class="task-progress">
             <span class="progress-track"><span class="progress-fill" style="width:${task.progress}%"></span></span>
             <span class="progress-value">${task.progress}%</span>
           </span>
           <span class="row-actions">
+            ${progressAction(task, name, kids > 0)}
             <button type="button" class="icon-btn" data-action="edit" aria-label="Edit ${name}" title="Edit">${editIcon}</button>
             <button type="button" class="icon-btn" data-action="duplicate" aria-label="Duplicate ${name}" title="Duplicate (${isMac ? '⌘D' : 'Ctrl+D'})">${copyIcon}</button>
             <button type="button" class="icon-btn danger" data-action="delete" aria-label="Delete ${name}" title="Delete">${deleteIcon}</button>

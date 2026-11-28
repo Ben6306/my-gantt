@@ -2,7 +2,8 @@
 import { joinDeps } from './utils.js';
 
 // 열 이름은 JSON 백업 필드와 같게 해서 둘을 오가기 쉽게 한다 (group = parent, baseline_* = baseline*)
-export const CSV_COLUMNS = ['id', 'name', 'type', 'group', 'start', 'end', 'progress', 'dependencies', 'color', 'notes', 'baseline_start', 'baseline_end'];
+// 실제 날짜 열은 나중에 생겨서 맨 뒤에 둔다 (예전에 내보낸 CSV의 열 순서와 앞부분이 같게)
+export const CSV_COLUMNS = ['id', 'name', 'type', 'group', 'start', 'end', 'progress', 'dependencies', 'color', 'notes', 'baseline_start', 'baseline_end', 'actual_start', 'actual_end'];
 
 // 엑셀은 =, +, -, @로 시작하는 칸을 수식으로 실행한다(CSV 주입). 앞에 '를 붙여 글자로 두고, 읽을 때 뗀다
 const FORMULA_START = /^[=+\-@\t\r]/;
@@ -28,6 +29,8 @@ export function tasksToCSV(tasks) {
     t.notes ?? '',
     t.baselineStart ?? '',
     t.baselineEnd ?? '',
+    t.actualStart ?? '',
+    t.actualEnd ?? '',
   ]);
   return [CSV_COLUMNS, ...rows].map((row) => row.map(cell).join(',')).join('\r\n');
 }
@@ -94,6 +97,8 @@ const HEADER_ALIASES = {
   notes: 'notes',
   baselinestart: 'baseline_start',
   baselineend: 'baseline_end',
+  actualstart: 'actual_start',
+  actualend: 'actual_end',
 };
 const headerKey = (h) => HEADER_ALIASES[h.trim().toLowerCase().replace(/[\s_()-]/g, '')] ?? null;
 
@@ -147,5 +152,7 @@ export function csvToTasks(text) {
     notes: r.notes ?? '',
     baselineStart: normalizeDate(r.baseline_start ?? ''),
     baselineEnd: normalizeDate(r.baseline_end ?? ''),
+    actualStart: normalizeDate(r.actual_start ?? ''),
+    actualEnd: normalizeDate(r.actual_end ?? ''),
   }));
 }

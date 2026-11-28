@@ -41,6 +41,7 @@ export function normalizeTree(tasks) {
   return ordered;
 }
 
+// 그룹 = 자식 전체. 실제 시작은 먼저 시작한 자식, 실제 종료는 모든 자식이 끝났을 때 가장 늦은 것
 function rollup(group, kids) {
   let start = kids[0].start;
   let end = kids[0].end;
@@ -53,7 +54,17 @@ function rollup(group, kids) {
     weight += days;
     done += days * k.progress;
   }
-  return { ...group, start, end, progress: Math.round(done / weight) };
+  const { actualStart: _s, actualEnd: _e, ...rest } = group;
+  const started = kids.filter((k) => k.actualStart).map((k) => k.actualStart).sort();
+  const finished = kids.every((k) => k.actualEnd) ? kids.map((k) => k.actualEnd).sort() : [];
+  return {
+    ...rest,
+    start,
+    end,
+    progress: Math.round(done / weight),
+    ...(started.length ? { actualStart: started[0] } : {}),
+    ...(finished.length ? { actualEnd: finished.at(-1) } : {}),
+  };
 }
 
 // 그룹 id → 자식 수
@@ -163,7 +174,7 @@ export function moveNextTo(tasks, id, anchorId, after) {
 /**
  * id 태스크를 복제해 원본(그룹이면 자식들까지) 바로 아래에 넣는다.
  * 그룹을 복제하면 자식도 함께 복제하고, 복제본끼리의 의존성은 복제본을 가리키게 바꾼다.
- * 기준선은 복제본이 계획에 없던 것이라 넣지 않는다.
+ * 기준선·실제 날짜는 복제본이 계획에 없던, 아직 하지 않은 일이라 넣지 않는다.
  * @param {object[]} tasks
  * @param {string} id
  * @param {number} firstId 새 id로 쓸 첫 숫자 (복제본마다 1씩 늘린다)
@@ -175,7 +186,7 @@ export function duplicateTask(tasks, id, firstId) {
   const block = [tasks[index], ...tasks.filter((t) => t.parent === id)];
   const idMap = new Map(block.map((t, i) => [t.id, String(firstId + i)]));
   const copies = block.map((t) => {
-    const { baselineStart, baselineEnd, ...rest } = t;
+    const { baselineStart, baselineEnd, actualStart, actualEnd, ...rest } = t;
     return {
       ...rest,
       id: idMap.get(t.id),

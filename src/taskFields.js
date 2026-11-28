@@ -1,8 +1,8 @@
-// 태스크의 선택 필드(종류·그룹·접힘·메모·기준선)를 정리하는 순수 함수. 기본값인 필드는 저장하지 않는다
+// 태스크의 선택 필드(종류·그룹·접힘·메모·기준선·실제 날짜)를 정리하는 순수 함수. 기본값인 필드는 저장하지 않는다
 import { isValidDate } from './utils.js';
 
 export const NOTES_MAX = 2000;
-const OPTIONAL_KEYS = ['type', 'parent', 'collapsed', 'notes', 'baselineStart', 'baselineEnd'];
+const OPTIONAL_KEYS = ['type', 'parent', 'collapsed', 'notes', 'baselineStart', 'baselineEnd', 'actualStart', 'actualEnd'];
 
 export const isMilestone = (t) => t.type === 'milestone';
 export const isGroup = (t) => t.type === 'group';
@@ -14,6 +14,7 @@ export const isGroup = (t) => t.type === 'group';
  * - collapsed: 그룹만, true일 때만
  * - notes: 앞뒤 공백을 뺀 내용이 있을 때만
  * - baselineStart·baselineEnd: 둘 다 올바른 날짜이고 순서가 맞을 때만
+ * - actualStart·actualEnd(실제 시작·종료): 종료는 시작이 있고 그 뒤일 때만. 마일스톤은 완료일 하나(actualEnd)라 둘을 같게
  */
 export function optionalFields(raw) {
   const out = {};
@@ -25,6 +26,12 @@ export function optionalFields(raw) {
   if (isValidDate(raw.baselineStart) && isValidDate(raw.baselineEnd) && raw.baselineStart <= raw.baselineEnd) {
     out.baselineStart = raw.baselineStart;
     out.baselineEnd = raw.baselineEnd;
+  }
+  if (out.type === 'milestone') {
+    if (isValidDate(raw.actualEnd)) out.actualStart = out.actualEnd = raw.actualEnd;
+  } else if (isValidDate(raw.actualStart)) {
+    out.actualStart = raw.actualStart;
+    if (isValidDate(raw.actualEnd) && raw.actualEnd >= raw.actualStart) out.actualEnd = raw.actualEnd;
   }
   return out;
 }

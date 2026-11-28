@@ -83,8 +83,13 @@ function line(ctx, x1, y1, x2, y2, color, width = 1) {
  * @returns {Promise<string>} 내려받은 파일 이름
  */
 export async function exportPng({ tasks, projectName, mode, columnWidth, now = new Date() }) {
-  // 기준선이 지금 일정 밖에 있어도 잘리지 않게 기간에 넣는다
-  const spans = tasks.flatMap((t) => (t.baselineStart ? [t, { start: t.baselineStart, end: t.baselineEnd }] : [t]));
+  // 기준선·실제 기간이 계획 일정 밖에 있어도 잘리지 않게 기간에 넣는다 (진행 중이면 오늘까지)
+  const todayISO = toISODate(now);
+  const spans = tasks.flatMap((t) => [
+    t,
+    ...(t.baselineStart ? [{ start: t.baselineStart, end: t.baselineEnd }] : []),
+    ...(t.actualStart ? [{ start: t.actualStart, end: t.actualEnd ?? (todayISO > t.actualStart ? todayISO : t.actualStart) }] : []),
+  ]);
   const tl = buildTimeline(spans, { mode, columnWidth });
 
   const c = {
@@ -118,13 +123,13 @@ export async function exportPng({ tasks, projectName, mode, columnWidth, now = n
     projectName,
     subtitle,
     exported,
-    'TaskStartEndProgress%…',
-    ...tasks.flatMap((t) => [t.name, formatDate(t.start), formatDate(t.end)]),
+    'TaskStartEndProgress%…plan',
+    ...tasks.flatMap((t) => [t.name, formatDate(t.start), formatDate(t.end), t.actualStart ? formatDate(t.actualStart) : '', t.actualEnd ? formatDate(t.actualEnd) : '']),
     ...tl.columns.map((col) => col.label),
     ...tl.groups.map((g) => g.label),
   ].join('');
   await Promise.all(
-    [font(400, 12), font(500, 12), font(700, 12), font(400, 13), font(500, 13), font(600, 13), font(600, 20)].map((f) =>
+    [font(400, 11), font(400, 12), font(500, 12), font(700, 12), font(400, 13), font(500, 13), font(600, 13), font(600, 20)].map((f) =>
       document.fonts.load(f, allText),
     ),
   );
@@ -249,12 +254,23 @@ export async function exportPng({ tasks, projectName, mode, columnWidth, now = n
     ctx.font = font(t.type === 'group' ? 600 : 400, 13);
     ctx.fillStyle = c.text;
     ctx.fillText(ellipsize(ctx, t.name, nameW - 18 - indent), colName + indent + 18, mid);
-    ctx.fillStyle = c.text2;
-    ctx.fillText(formatDate(t.start), colStart, mid);
-    // 늦은 태스크는 화면처럼 종료일을 빨강(기한 지남)·주황(뒤처짐)으로
+    // 날짜: 화면처럼 실제 기록이 있으면 실제 날짜(밝게)와 아래 작게 "plan …", 없으면 계획(흐리게).
+    // 늦은 태스크는 시작 늦음이면 시작일을 주황, 기한 지남이면 종료일을 빨강, 뒤처짐이면 종료일을 주황
     const { status } = scheduleStatus(t, toISODate(now));
-    ctx.fillStyle = status === 'overdue' ? c.danger : status === 'behind' ? c.warning : c.text2;
-    ctx.fillText(formatDate(t.end), colEnd, mid);
+    const dateText = (x, plan, actual, warnColor) => {
+      ctx.font = actual ? font(500, 13) : font(400, 13);
+      ctx.fillStyle = warnColor ?? (actual ? c.text : c.text2);
+      const moved = actual && actual !== plan;
+      ctx.fillText(formatDate(actual ?? plan), x, moved ? mid - 6 : mid);
+      if (moved) {
+        ctx.font = font(400, 11);
+        ctx.fillStyle = c.text3;
+        ctx.fillText(`plan ${formatDate(plan).replace(/, \d{4}$/, '')}`, x, mid + 9);
+      }
+    };
+    // 마일스톤은 시작·종료 구분이 없어 시작일 칸은 계획 날짜, 종료일 칸에 완료일
+    dateText(colStart, t.start, t.type === 'milestone' ? undefined : t.actualStart, status === 'lateStart' ? c.warning : null);
+    dateText(colEnd, t.end, t.actualEnd, status === 'overdue' ? c.danger : status === 'behind' ? c.warning : null);
 
     const trackW = L.progressW - 40;
     ctx.fillStyle = c.hairline;
@@ -330,41 +346,77 @@ export async function exportPng({ tasks, projectName, mode, columnWidth, now = n
     const width = x2 - x1;
 
     if (t.type === 'milestone') {
-      // 화면처럼 그날 칸 가운데 마름모, 이름은 오른쪽
+      // 화면처럼 그날 칸 가운데 마름모, 이름은 오른쪽. 완료일이 기록돼 있으면 계획은 빈 점선 마름모, 완료일에 찬 마름모
       const cx = (x1 + x2) / 2;
       const r = L.barH * 0.47;
       ctx.beginPath();
       diamond(ctx, cx, mid, r);
-      ctx.fillStyle = mix(color, c.bg, t.progress >= 100 ? 0.52 : 0.28);
+      ctx.fillStyle = mix(color, c.bg, t.actualEnd ? 0.1 : t.progress >= 100 ? 0.52 : 0.28);
       ctx.fill();
-      ctx.strokeStyle = mix(color, c.bg, 0.6);
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = mix(color, c.bg, t.actualEnd ? 0.75 : 0.6);
+      ctx.lineWidth = t.actualEnd ? 1.5 : 1;
+      ctx.setLineDash(t.actualEnd ? [4, 3] : []);
       ctx.stroke();
+      ctx.setLineDash([]);
+      if (t.actualEnd) {
+        const ax = gx + tl.x(parseISODate(t.actualEnd)) + (x2 - x1) / 2;
+        ctx.beginPath();
+        diamond(ctx, ax, mid, r);
+        ctx.fillStyle = mix(color, c.bg, 0.52);
+        ctx.fill();
+      }
       ctx.font = font(500, 12);
       ctx.textAlign = 'left';
       ctx.fillStyle = c.text2;
-      ctx.fillText(t.name, cx + r + 6, mid);
+      // 완료일 마름모가 더 오른쪽이면 그 뒤에
+      const lastX = t.actualEnd ? Math.max(cx, gx + tl.x(parseISODate(t.actualEnd)) + (x2 - x1) / 2) : cx;
+      ctx.fillText(t.name, lastX + r + 6, mid);
       continue;
     }
 
     // 그룹 막대는 화면처럼 각진 모서리, 조금 진한 바탕과 테두리, 굵은 이름
     const group = t.type === 'group';
     const radius = group ? 1 : 4;
-    ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(x1, top, width, L.barH, radius);
-    ctx.fillStyle = mix(color, c.bg, group ? 0.4 : 0.28);
-    ctx.fill();
-    ctx.clip();
-    ctx.fillStyle = mix(color, c.bg, 0.52);
-    ctx.fillRect(x1, top, (width * t.progress) / 100, L.barH);
-    ctx.restore();
+    // 막대 밖 이름은 계획·실제 중 더 늦은 끝 뒤에
+    let labelX = x2;
+    if (t.actualStart) {
+      // 시작을 기록했으면 화면처럼 계획은 빈 점선 테두리, 실제 기간(진행 중이면 오늘까지)은 찬 막대
+      ctx.beginPath();
+      ctx.roundRect(x1, top, width, L.barH, radius);
+      ctx.fillStyle = mix(color, c.bg, 0.1);
+      ctx.fill();
+      const lastDay = t.actualEnd ?? (toISODate(now) < t.actualStart ? t.actualStart : toISODate(now));
+      const ax1 = gx + tl.x(parseISODate(t.actualStart));
+      const ax2 = gx + tl.x(addDays(parseISODate(lastDay), 1));
+      ctx.beginPath();
+      ctx.roundRect(ax1, top, Math.max(2, ax2 - ax1), L.barH, radius);
+      ctx.fillStyle = mix(color, c.bg, t.actualEnd ? 0.52 : 0.44);
+      ctx.fill();
+      labelX = Math.max(x2, ax2);
+      ctx.beginPath();
+      ctx.roundRect(x1 + 0.75, top + 0.75, width - 1.5, L.barH - 1.5, radius);
+      ctx.strokeStyle = mix(color, c.bg, 0.75);
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(x1, top, width, L.barH, radius);
+      ctx.fillStyle = mix(color, c.bg, group ? 0.4 : 0.28);
+      ctx.fill();
+      ctx.clip();
+      ctx.fillStyle = mix(color, c.bg, 0.52);
+      ctx.fillRect(x1, top, (width * t.progress) / 100, L.barH);
+      ctx.restore();
 
-    ctx.beginPath();
-    ctx.roundRect(x1 + 0.5, top + 0.5, width - 1, L.barH - 1, radius);
-    ctx.strokeStyle = mix(color, c.bg, group ? 0.75 : 0.6);
-    ctx.lineWidth = group ? 1.5 : 1;
-    ctx.stroke();
+      ctx.beginPath();
+      ctx.roundRect(x1 + 0.5, top + 0.5, width - 1, L.barH - 1, radius);
+      ctx.strokeStyle = mix(color, c.bg, group ? 0.75 : 0.6);
+      ctx.lineWidth = group ? 1.5 : 1;
+      ctx.stroke();
+    }
 
     ctx.font = font(group ? 700 : 500, 12);
     const labelW = ctx.measureText(t.name).width;
@@ -375,7 +427,7 @@ export async function exportPng({ tasks, projectName, mode, columnWidth, now = n
     } else {
       ctx.textAlign = 'left';
       ctx.fillStyle = c.text2;
-      ctx.fillText(t.name, x2 + 8, mid);
+      ctx.fillText(t.name, labelX + 8, mid);
     }
   }
 

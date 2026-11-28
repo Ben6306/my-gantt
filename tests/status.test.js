@@ -11,8 +11,8 @@ test('100%면 날짜와 상관없이 완료', () => {
 
 test('종료일이 지났는데 끝나지 않았으면 기한 지남, 지난 날 수를 센다', () => {
   assert.deepEqual(scheduleStatus(task('2026-12-01', '2026-12-05', 80), '2026-12-08'), { status: 'overdue', days: 3 });
-  // 종료일 당일은 아직 기한 안
-  assert.equal(scheduleStatus(task('2026-12-01', '2026-12-05', 0), '2026-12-05').status, 'behind');
+  // 종료일 당일은 아직 기한 안 (시작 기록이 있으면 진행률로 뒤처짐을 본다)
+  assert.equal(scheduleStatus({ ...task('2026-12-01', '2026-12-05', 0), actualStart: '2026-12-01' }, '2026-12-05').status, 'behind');
 });
 
 test('지난 기간 비율보다 20%p 넘게 늦으면 뒤처짐', () => {
@@ -31,7 +31,17 @@ test('하루짜리(마일스톤)는 그날이 지나야 기한 지남', () => {
   assert.equal(scheduleStatus(task('2026-12-10', '2026-12-10', 0), '2026-12-11').status, 'overdue');
 });
 
+test('계획 시작일이 지났는데 시작 기록도 진행률도 없으면 시작 늦음', () => {
+  assert.deepEqual(scheduleStatus(task('2026-12-01', '2026-12-10', 0), '2026-12-03'), { status: 'lateStart', days: 2 });
+  // 시작을 기록했거나 진행률이 있으면 아님
+  assert.equal(scheduleStatus({ ...task('2026-12-01', '2026-12-10', 0), actualStart: '2026-12-02' }, '2026-12-03').status, 'ok');
+  assert.equal(scheduleStatus(task('2026-12-01', '2026-12-10', 10), '2026-12-03').status, 'ok');
+  // 종료일까지 지났으면 기한 지남이 먼저
+  assert.equal(scheduleStatus(task('2026-12-01', '2026-12-02', 0), '2026-12-03').status, 'overdue');
+});
+
 test('설명 문구', () => {
+  assert.equal(statusText({ status: 'lateStart', days: 2 }, 0), 'Not started yet — planned to start 2 days ago');
   assert.equal(statusText({ status: 'overdue', days: 1 }, 50), 'Overdue by 1 day');
   assert.equal(statusText({ status: 'behind', expected: 60 }, 30), 'Behind schedule: 30% done, about 60% expected');
   assert.equal(statusText({ status: 'ok' }, 30), '');

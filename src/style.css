@@ -435,7 +435,7 @@ button {
 .task-row {
   display: grid;
   /* 날짜 칸은 "Dec 28, 2026"이 들어가는 너비 */
-  grid-template-columns: minmax(0, 1fr) 92px 92px 88px 84px;
+  grid-template-columns: minmax(0, 1fr) 92px 92px 88px 112px;
   gap: 12px;
   align-items: center;
   padding: 0 8px 0 16px;
@@ -662,14 +662,33 @@ button.group-toggle:hover {
   background: var(--c);
 }
 
-/* 늦은 태스크: 종료일 앞에 경고 아이콘, 기한 지남은 빨강·뒤처짐은 주황 */
-.task-end {
+/* 날짜 칸: 계획 날짜는 흐리게, 실제 기록 날짜는 밝게. 계획과 다르면 아래 줄에 작게 "plan Nov 27" */
+.task-date {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  flex-direction: column;
   min-width: 0;
   white-space: nowrap;
 }
+
+.date-main {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.task-date.is-actual {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.plan-date {
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 13px;
+}
+
+/* 늦은 태스크: 날짜 앞에 경고 아이콘. 기한 지남은 빨강(종료일), 시작 늦음·뒤처짐은 주황 */
 
 .late-icon {
   display: grid;
@@ -685,11 +704,12 @@ button.group-toggle:hover {
   stroke-linecap: round;
 }
 
-.is-overdue .task-end {
+.is-overdue .task-end.has-warning {
   color: var(--danger);
 }
 
-.is-behind .task-end {
+.is-behind .task-end.has-warning,
+.is-lateStart .task-start.has-warning {
   color: var(--warning);
 }
 
@@ -841,6 +861,47 @@ button.group-toggle:hover {
   fill: color-mix(in srgb, var(--c, #8b93a1) var(--bar-progress-mix), var(--bg));
 }
 
+/*
+ * 계획 vs 실제: 시작을 기록한 태스크(.has-actual)는 계획 막대를 빈 점선 테두리로, 실제 기간은 색이 찬 막대(.actual-bar)로.
+ * 진행률 채움·손잡이는 숨긴다(실제 막대가 대신 보여 준다). 진행 중인 실제 막대는 오른쪽 끝을 조금 흐리게
+ */
+.chart .gantt .bar-wrapper.has-actual .bar {
+  fill: color-mix(in srgb, var(--c, #8b93a1) 10%, var(--bg));
+  stroke: color-mix(in srgb, var(--c, #8b93a1) 75%, var(--bg));
+  stroke-width: 1.5px;
+  stroke-dasharray: 5 3;
+}
+
+.chart .gantt .bar-wrapper.has-actual .bar-progress,
+.chart .gantt .bar-wrapper.has-actual .handle.progress {
+  display: none;
+}
+
+.chart .gantt .actual-bar {
+  fill: color-mix(in srgb, var(--c, #8b93a1) var(--bar-progress-mix), var(--bg));
+  pointer-events: none;
+}
+
+.chart .gantt .actual-bar.is-ongoing {
+  fill: color-mix(in srgb, var(--c, #8b93a1) 44%, var(--bg));
+}
+
+/* 시작한 태스크도 늦으면 점선 테두리 색으로 알린다 (위 .has-actual 테두리보다 우선) */
+.chart .gantt .bar-wrapper.has-actual.is-overdue .bar {
+  stroke: var(--danger);
+}
+
+.chart .gantt .bar-wrapper.has-actual.is-behind .bar {
+  stroke: var(--warning);
+}
+
+/* 마일스톤의 실제 완료일도 같은 마름모 */
+.chart .gantt .bar-wrapper.is-milestone .actual-bar {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: rotate(45deg) scale(calc(0.66 * var(--ms-sx, 1)), 0.66);
+}
+
 /* 선택된 막대는 색이 무엇이든 보이도록 흰 테두리 */
 .chart .gantt .bar-wrapper.is-selected .bar {
   stroke: var(--text);
@@ -879,6 +940,10 @@ button.group-toggle:hover {
   color: var(--text);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.chart .gantt-container .popup-wrapper .popup-actual {
+  color: var(--text);
 }
 
 .chart .gantt-container .popup-wrapper .popup-baseline {
@@ -966,6 +1031,21 @@ button.group-toggle:hover {
 
 .modal-wide {
   width: min(560px, calc(100vw - 32px));
+}
+
+/* 태스크 모달: 날짜 줄에 계획 2칸 + 실제 2칸이 들어가게 더 넓게 */
+.modal-xwide {
+  width: min(640px, calc(100vw - 32px));
+}
+
+.date-row input[type='date'] {
+  min-width: 0;
+  padding: 0 8px;
+}
+
+/* 실제 날짜 칸은 계획 칸과 구분되게 이름을 조금 밝게 */
+.actual-field > span {
+  color: var(--text);
 }
 
 /* 칸 두 개를 나란히. 종류에 따라 한쪽이 숨으면 남은 칸이 줄을 채운다 */
