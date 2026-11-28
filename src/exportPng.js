@@ -51,6 +51,15 @@ function ellipsize(ctx, text, maxWidth) {
   return `${text.slice(0, lo)}…`;
 }
 
+// (cx, cy) 가운데, 가운데~꼭짓점 r인 마름모 경로 (fill/stroke는 부르는 쪽에서)
+function diamond(ctx, cx, cy, r) {
+  ctx.moveTo(cx, cy - r);
+  ctx.lineTo(cx + r, cy);
+  ctx.lineTo(cx, cy + r);
+  ctx.lineTo(cx - r, cy);
+  ctx.closePath();
+}
+
 function line(ctx, x1, y1, x2, y2, color, width = 1) {
   ctx.strokeStyle = color;
   ctx.lineWidth = width;
@@ -221,7 +230,8 @@ export async function exportPng({ tasks, projectName, mode, columnWidth, now = n
     const color = taskColors[t.color];
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.roundRect(colName, mid - 5, 10, 10, 3);
+    if (t.type === 'milestone') diamond(ctx, colName + 5, mid, 6);
+    else ctx.roundRect(colName, mid - 5, 10, 10, 3);
     ctx.fill();
 
     ctx.textAlign = 'left';
@@ -293,6 +303,24 @@ export async function exportPng({ tasks, projectName, mode, columnWidth, now = n
     const { x1, x2, top, mid } = geo.get(t.id);
     const color = taskColors[t.color];
     const width = x2 - x1;
+
+    if (t.type === 'milestone') {
+      // 화면처럼 그날 칸 가운데 마름모, 이름은 오른쪽
+      const cx = (x1 + x2) / 2;
+      const r = L.barH * 0.47;
+      ctx.beginPath();
+      diamond(ctx, cx, mid, r);
+      ctx.fillStyle = mix(color, c.bg, t.progress >= 100 ? 0.52 : 0.28);
+      ctx.fill();
+      ctx.strokeStyle = mix(color, c.bg, 0.6);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.font = font(500, 12);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = c.text2;
+      ctx.fillText(t.name, cx + r + 6, mid);
+      continue;
+    }
 
     ctx.save();
     ctx.beginPath();

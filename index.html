@@ -136,6 +136,14 @@
       <form id="task-form" method="dialog" novalidate>
         <h2 id="modal-title">Add task</h2>
 
+        <fieldset class="field">
+          <legend class="sr-only">Type</legend>
+          <div class="segmented" id="type-options">
+            <label><input type="radio" name="type" value="task" /><span>Task</span></label>
+            <label><input type="radio" name="type" value="milestone" /><span>Milestone</span></label>
+          </div>
+        </fieldset>
+
         <label class="field">
           <span>Name</span>
           <input name="name" type="text" required maxlength="60" autocomplete="off" />
@@ -143,22 +151,27 @@
 
         <div class="field-row">
           <label class="field">
-            <span>Start date</span>
+            <span id="start-label">Start date</span>
             <input name="start" type="date" required />
           </label>
-          <label class="field">
+          <label class="field not-milestone">
             <span>End date</span>
             <input name="end" type="date" required />
           </label>
         </div>
-        <p id="duration-hint" class="field-hint" aria-live="polite"></p>
+        <p id="duration-hint" class="field-hint not-milestone" aria-live="polite"></p>
 
         <fieldset class="field">
           <legend>Color</legend>
           <div id="color-options" class="color-options"></div>
         </fieldset>
 
-        <label class="field">
+        <label class="field-check only-milestone">
+          <input name="done" type="checkbox" />
+          <span>Done</span>
+        </label>
+
+        <label class="field not-milestone">
           <span>Progress (%)</span>
           <input name="progress" type="number" min="0" max="100" step="1" inputmode="numeric" required />
         </label>

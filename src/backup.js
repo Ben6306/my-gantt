@@ -1,5 +1,6 @@
 // 태스크를 JSON 백업 파일로 만들고, 불러온 백업 파일을 검증·정규화하는 순수 함수 모음
-import { fileStem, joinDeps, parseDeps, toISODate } from './utils.js';
+import { fileStem, isValidDate, joinDeps, parseDeps, toISODate } from './utils.js';
+import { optionalFields } from './taskFields.js';
 import { colorFor, isColorKey } from './colors.js';
 
 const APP_ID = 'my-gantt';
@@ -17,13 +18,6 @@ export function buildBackup({ tasks, projectName }, now = new Date()) {
 
 export const backupFileName = (projectName, now = new Date()) => `${fileStem(projectName)}-${toISODate(now)}.json`;
 
-// "2026-02-30"처럼 형식은 맞지만 없는 날짜도 걸러낸다
-function isValidDate(value) {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const [y, m, d] = value.split('-').map(Number);
-  return toISODate(new Date(y, m - 1, d)) === value;
-}
-
 const ordinal = (n) => {
   const suffix = n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th';
   return `${n}${suffix}`;
@@ -39,9 +33,12 @@ function normalizeTask(raw, index) {
   const name = typeof raw.name === 'string' ? raw.name.trim() : '';
   if (!name) throw new Error(`${where} has no name.`);
 
+  const extra = optionalFields(raw);
   if (!isValidDate(raw.start)) throw new Error(`“${name}” has an invalid start date (expected YYYY-MM-DD).`);
-  if (!isValidDate(raw.end)) throw new Error(`“${name}” has an invalid end date (expected YYYY-MM-DD).`);
-  if (raw.end < raw.start) throw new Error(`“${name}” ends before it starts.`);
+  // 마일스톤은 하루짜리라 종료일을 보지 않고 시작일로 맞춘다
+  const end = extra.type === 'milestone' ? raw.start : raw.end;
+  if (!isValidDate(end)) throw new Error(`“${name}” has an invalid end date (expected YYYY-MM-DD).`);
+  if (end < raw.start) throw new Error(`“${name}” ends before it starts.`);
 
   const progress = Number(raw.progress ?? 0);
   if (!Number.isFinite(progress) || progress < 0 || progress > 100) {
@@ -52,11 +49,12 @@ function normalizeTask(raw, index) {
     id,
     name,
     start: raw.start,
-    end: raw.end,
+    end,
     progress: Math.round(progress),
     dependencies: parseDeps(raw.dependencies),
     // 색이 없거나 모르는 값이면 오류 대신 순서대로 기본 색을 준다
     color: isColorKey(raw.color) ? raw.color : colorFor(index),
+    ...extra,
   };
 }
 

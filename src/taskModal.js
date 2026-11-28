@@ -11,8 +11,18 @@ const errorEl = document.getElementById('form-error');
 const deleteBtn = document.getElementById('delete-btn');
 const colorOptions = document.getElementById('color-options');
 const durationHint = document.getElementById('duration-hint');
+const startLabel = document.getElementById('start-label');
 
 let current = null;
+
+// 종류에 따라 보이는 칸이 달라진다 (마일스톤: 종료일·진행률 대신 날짜 하나와 Done)
+function applyType() {
+  const type = form.elements.type.value;
+  form.dataset.type = type;
+  startLabel.textContent = type === 'milestone' ? 'Date' : 'Start date';
+  titleEl.textContent = `${current.isNew ? 'Add' : 'Edit'} ${type === 'milestone' ? 'milestone' : 'task'}`;
+}
+form.querySelectorAll('input[name="type"]').forEach((input) => input.addEventListener('change', applyType));
 
 // 색상 스와치는 한 번만 만들고, 열 때마다 선택만 바꾼다
 colorOptions.replaceChildren(
@@ -91,16 +101,18 @@ function renderDependencyOptions(task, tasks, isNew) {
  * @param {() => Promise<boolean>} [opts.onDelete] 실제로 삭제했으면 true
  */
 export function openTaskModal({ task, isNew, tasks, onSave, onDelete }) {
-  current = { onSave, onDelete };
+  current = { onSave, onDelete, isNew };
 
-  titleEl.textContent = isNew ? 'Add task' : 'Edit task';
+  form.elements.type.value = task.type === 'milestone' ? 'milestone' : 'task';
   form.elements.name.value = task.name;
   form.elements.start.value = task.start;
   form.elements.end.value = task.end;
   form.elements.progress.value = task.progress;
+  form.elements.done.checked = task.progress >= 100;
   form.elements.color.value = task.color;
   renderDependencyOptions(task, tasks, isNew);
   updateDurationHint();
+  applyType();
 
   errorEl.textContent = '';
   deleteBtn.hidden = isNew;
@@ -130,21 +142,25 @@ function showError(message, field) {
 
 form.addEventListener('submit', (e) => {
   e.preventDefault();
-  const { name, start, end, progress } = form.elements;
-  const progressValue = Number(progress.value);
+  const { name, start, end, progress, done } = form.elements;
+  const milestone = form.elements.type.value === 'milestone';
+  const progressValue = milestone ? (done.checked ? 100 : 0) : Number(progress.value);
 
   if (!name.value.trim()) return showError('Enter a name.', name);
-  if (!start.value) return showError('Enter a start date.', start);
-  if (!end.value) return showError('Enter an end date.', end);
-  if (end.value < start.value) return showError('The end date can’t be before the start date.', end);
-  if (progress.value.trim() === '' || !Number.isInteger(progressValue) || progressValue < 0 || progressValue > 100) {
-    return showError('Progress must be a whole number from 0 to 100.', progress);
+  if (!start.value) return showError(milestone ? 'Enter a date.' : 'Enter a start date.', start);
+  if (!milestone) {
+    if (!end.value) return showError('Enter an end date.', end);
+    if (end.value < start.value) return showError('The end date can’t be before the start date.', end);
+    if (progress.value.trim() === '' || !Number.isInteger(progressValue) || progressValue < 0 || progressValue > 100) {
+      return showError('Progress must be a whole number from 0 to 100.', progress);
+    }
   }
 
   current.onSave({
+    type: milestone ? 'milestone' : 'task',
     name: name.value.trim(),
     start: start.value,
-    end: end.value,
+    end: milestone ? start.value : end.value,
     progress: progressValue,
     color: form.elements.color.value,
     dependencies: joinDeps([...form.querySelectorAll('input[name="dependencies"]:checked')].map((i) => i.value)),

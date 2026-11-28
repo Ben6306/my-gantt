@@ -34,7 +34,7 @@ export function renderTaskList(tasks, selectedId, today = toISODate(new Date()))
       const late = isLate(status);
       const lateText = escapeHTML(statusText(status, task.progress));
       return `
-        <li class="task-row c-${escapeHTML(task.color)}${selected ? ' is-selected' : ''}${task.progress === 100 ? ' is-done' : ''}${late ? ` is-${status.status}` : ''}" data-id="${escapeHTML(task.id)}" tabindex="0"${selected ? ' aria-current="true"' : ''}>
+        <li class="task-row c-${escapeHTML(task.color)}${selected ? ' is-selected' : ''}${task.progress === 100 ? ' is-done' : ''}${late ? ` is-${status.status}` : ''}${task.type === 'milestone' ? ' is-milestone' : ''}" data-id="${escapeHTML(task.id)}" tabindex="0"${selected ? ' aria-current="true"' : ''}>
           <span class="drag-handle" draggable="true" title="Drag to reorder (Alt+↑/↓)">${gripIcon}</span>
           <span class="task-name" title="${name}"><span class="color-dot"></span><span class="task-name-text">${name}</span></span>
           <span class="task-date">${formatDate(task.start)}</span>

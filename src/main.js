@@ -19,16 +19,22 @@ import { createHistory } from './history.js';
 import { initListResizer } from './listResizer.js';
 import { HOLIDAYS, holidayName, workingDays } from './holidays.js';
 import { isLate, scheduleStatus, statusText } from './status.js';
+import { cleanTask, isMilestone } from './taskFields.js';
 
 const DEFAULT_PROJECT_NAME = 'Untitled project';
 
+// 태스크 목록을 저장 형식으로 정리한다: 선택 필드(종류·메모 등)는 기본값이면 빼고, 마일스톤은 하루짜리로
+const normalizeTasks = (list) => list.map(cleanTask);
+
 // 이전 버전 데이터 맞추기: dependencies 배열 → 문자열, 색상이 없으면 순서대로 기본 색
 const normalize = (list) =>
-  list.map((t, i) => ({
-    ...t,
-    dependencies: joinDeps(parseDeps(t.dependencies)),
-    color: isColorKey(t.color) ? t.color : colorFor(i),
-  }));
+  normalizeTasks(
+    list.map((t, i) => ({
+      ...t,
+      dependencies: joinDeps(parseDeps(t.dependencies)),
+      color: isColorKey(t.color) ? t.color : colorFor(i),
+    })),
+  );
 
 // 저장된 프로젝트 목록을 읽는다. 처음이면 예전 단일 프로젝트 데이터(설치한 앱의 기존 태스크)를 첫 프로젝트로 옮긴다
 const legacy = loadLegacyProject();
@@ -121,6 +127,8 @@ function highlightChart(chart = gantt) {
 // 렌더 뒤 차트를 꾸민다: 선택 강조, 늦은 막대 표시, 공휴일 이름 툴팁. 다시 불러도 같은 결과가 되게 한다
 function decorateChart(chart = gantt) {
   highlightChart(chart);
+  // 월 보기에서는 하루 폭이 3~4px라 주말·공휴일 음영이 바코드처럼 보여서 CSS로 숨긴다
+  chart.$container.dataset.mode = chart.options.view_mode;
   const today = toISODate(new Date());
   for (const t of tasks) {
     const wrapper = chart.$svg.querySelector(`.bar-wrapper[data-id="${CSS.escape(t.id)}"]`);
@@ -128,6 +136,20 @@ function decorateChart(chart = gantt) {
     const { status } = scheduleStatus(t, today);
     wrapper.classList.toggle('is-overdue', status === 'overdue');
     wrapper.classList.toggle('is-behind', status === 'behind');
+    wrapper.classList.toggle('is-done', t.progress >= 100);
+    wrapper.classList.toggle('is-milestone', isMilestone(t));
+    if (isMilestone(t)) {
+      // 하루 폭 막대를 CSS로 정사각형으로 늘인 뒤 45° 돌려 마름모로 그린다. 막대 자체를 바꾸므로 끄는 동안에도 따라간다
+      const rect = wrapper.querySelector('.bar');
+      wrapper.style.setProperty('--ms-sx', String(chart.options.bar_height / Math.max(1, rect.getWidth())));
+      // 이름은 마름모 오른쪽에. frappe가 다음 프레임에 이름 위치를 다시 잡으므로(draw_label) 그 뒤에 옮긴다
+      requestAnimationFrame(() => {
+        const label = wrapper.querySelector('.bar-label');
+        if (!label) return;
+        label.classList.add('big');
+        label.setAttribute('x', rect.getX() + rect.getWidth() / 2 + chart.options.bar_height / 2);
+      });
+    }
   }
   chart.$svg.querySelectorAll('.holiday-highlight:not(:has(title))').forEach((rect) => {
     const iso = [...rect.classList].find((c) => /^\d{4}-\d{2}-\d{2}$/.test(c));
@@ -218,7 +240,7 @@ function fitToScreen() {
 // 태스크를 바꾸는 유일한 경로: (label이 있으면) 이력 기록 → 저장 → 목록 갱신 → (필요하면) 차트 다시 그리기
 function commit(next, { redraw = true, label } = {}) {
   if (label) record(label);
-  tasks = next;
+  tasks = normalizeTasks(next);
   persist();
   renderTaskList(tasks, selectedId);
   if (redraw) redrawChart({ keepScroll: true });
@@ -503,9 +525,12 @@ const gantt = new Gantt('#gantt', chartTasks(), {
     const progress = Math.round(task.progress);
     const status = scheduleStatus({ start: startISO, end: endISO, progress }, toISODate(new Date()));
     const late = isLate(status) ? `<br/><span class="popup-late is-${status.status}">${statusText(status, progress)}</span>` : '';
-    ctx.set_details(
-      `${formatDate(startISO)} – ${formatDate(endISO)} (${plural(task.actual_duration, 'day')}, ${work} working)<br/>Progress ${progress}%${late}`,
-    );
+    const original = tasks.find((t) => t.id === task.id);
+    const when =
+      original && isMilestone(original)
+        ? `Milestone · ${formatDate(startISO)}<br/>${progress >= 100 ? 'Done' : 'Not done'}`
+        : `${formatDate(startISO)} – ${formatDate(endISO)} (${plural(task.actual_duration, 'day')}, ${work} working)<br/>Progress ${progress}%`;
+    ctx.set_details(`${when}${late}`);
   },
   on_view_change() {
     fitListSpacer(this);

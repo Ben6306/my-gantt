@@ -6,6 +6,13 @@ export const toISODate = (date) => {
   return `${y}-${m}-${d}`;
 };
 
+// "2026-02-30"처럼 형식은 맞지만 없는 날짜도 걸러낸다
+export function isValidDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split('-').map(Number);
+  return toISODate(new Date(y, m - 1, d)) === value;
+}
+
 export const addDays = (date, days) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 
 // "2026-12-01" → 현지 시각 자정의 Date (new Date("2026-12-01")은 UTC로 해석되어 하루 밀릴 수 있다)
