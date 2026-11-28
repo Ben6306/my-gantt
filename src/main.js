@@ -18,6 +18,7 @@ import { exportPng } from './exportPng.js';
 import { createHistory } from './history.js';
 import { initListResizer } from './listResizer.js';
 import { HOLIDAYS, holidayName, workingDays } from './holidays.js';
+import { isLate, scheduleStatus, statusText } from './status.js';
 
 const DEFAULT_PROJECT_NAME = 'Untitled project';
 
@@ -117,9 +118,17 @@ function highlightChart(chart = gantt) {
   chart.$svg.querySelector(`.bar-wrapper[data-id="${CSS.escape(selectedId)}"]`)?.classList.add('is-selected');
 }
 
-// 렌더 뒤 차트를 꾸민다: 선택 강조, 공휴일 이름 툴팁. 다시 불러도 같은 결과가 되게 한다
+// 렌더 뒤 차트를 꾸민다: 선택 강조, 늦은 막대 표시, 공휴일 이름 툴팁. 다시 불러도 같은 결과가 되게 한다
 function decorateChart(chart = gantt) {
   highlightChart(chart);
+  const today = toISODate(new Date());
+  for (const t of tasks) {
+    const wrapper = chart.$svg.querySelector(`.bar-wrapper[data-id="${CSS.escape(t.id)}"]`);
+    if (!wrapper) continue;
+    const { status } = scheduleStatus(t, today);
+    wrapper.classList.toggle('is-overdue', status === 'overdue');
+    wrapper.classList.toggle('is-behind', status === 'behind');
+  }
   chart.$svg.querySelectorAll('.holiday-highlight:not(:has(title))').forEach((rect) => {
     const iso = [...rect.classList].find((c) => /^\d{4}-\d{2}-\d{2}$/.test(c));
     const name = iso && holidayName(iso);
@@ -491,8 +500,11 @@ const gantt = new Gantt('#gantt', chartTasks(), {
     const startISO = toISODate(task._start);
     const endISO = toISODate(new Date(task._end.getTime() - 1000));
     const work = workingDays(startISO, endISO);
+    const progress = Math.round(task.progress);
+    const status = scheduleStatus({ start: startISO, end: endISO, progress }, toISODate(new Date()));
+    const late = isLate(status) ? `<br/><span class="popup-late is-${status.status}">${statusText(status, progress)}</span>` : '';
     ctx.set_details(
-      `${formatDate(startISO)} – ${formatDate(endISO)} (${plural(task.actual_duration, 'day')}, ${work} working)<br/>Progress ${Math.round(task.progress)}%`,
+      `${formatDate(startISO)} – ${formatDate(endISO)} (${plural(task.actual_duration, 'day')}, ${work} working)<br/>Progress ${progress}%${late}`,
     );
   },
   on_view_change() {

@@ -1,6 +1,7 @@
 // 전체 일정을 캔버스에 직접 그려 PNG로 내려받는 모듈 (스크롤과 상관없이 모든 태스크·첫 태스크~마지막 태스크 기간)
 import { buildTimeline } from './timeline.js';
 import { addDays, fileStem, formatDate, parseDeps, parseISODate, plural, toISODate } from './utils.js';
+import { scheduleStatus } from './status.js';
 
 const FONT_FAMILY = '"Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif';
 const font = (weight, size) => `${weight} ${size}px ${FONT_FAMILY}`;
@@ -83,6 +84,8 @@ export async function exportPng({ tasks, projectName, mode, columnWidth, now = n
     text2: cssVar('--text-2'),
     text3: cssVar('--text-3'),
     positive: cssVar('--positive'),
+    danger: cssVar('--danger'),
+    warning: cssVar('--warning'),
     arrow: cssVar('--g-arrow-color'),
     today: cssVar('--text'),
   };
@@ -227,6 +230,9 @@ export async function exportPng({ tasks, projectName, mode, columnWidth, now = n
     ctx.fillText(ellipsize(ctx, t.name, nameW - 18), colName + 18, mid);
     ctx.fillStyle = c.text2;
     ctx.fillText(formatDate(t.start), colStart, mid);
+    // 늦은 태스크는 화면처럼 종료일을 빨강(기한 지남)·주황(뒤처짐)으로
+    const { status } = scheduleStatus(t, toISODate(now));
+    ctx.fillStyle = status === 'overdue' ? c.danger : status === 'behind' ? c.warning : c.text2;
     ctx.fillText(formatDate(t.end), colEnd, mid);
 
     const trackW = L.progressW - 40;
