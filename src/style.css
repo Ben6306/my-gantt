@@ -1499,6 +1499,43 @@ button.group-toggle:hover {
   width: 280px;
 }
 
+/* 공유 링크로 연 읽기 전용 화면: 위에 안내 줄, 고치는 단추는 숨긴다 */
+.share-banner {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 16px 0 24px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.share-banner[hidden] {
+  display: none;
+}
+
+.share-banner .spacer {
+  flex: 1;
+}
+
+.share-banner .icon {
+  color: var(--accent);
+}
+
+.btn-primary.btn-sm-primary {
+  height: 28px;
+  padding: 0 12px;
+}
+
+.is-readonly :is(#import-btn, #new-project-btn, #project-menu-btn, #backup-status, #more-btn, #add-btn, #undo-btn, #redo-btn),
+.is-readonly .row-actions,
+.is-readonly .drag-handle {
+  display: none;
+}
+
 /* 헤더 백업 상태: 자동 저장 중(초록) / 멈춤·오래됨(주황) / 실패(빨강) / 최근 백업(회색) */
 .backup-status {
   display: inline-flex;

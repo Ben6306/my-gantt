@@ -12,6 +12,7 @@ import { confirmDialog } from './confirmDialog.js';
 import { allBackupFileName, backupFileName, buildAllBackup, buildBackup, parseAnyBackup, parseTaskList } from './backup.js';
 import { autosaveSupported, createAutosave } from './autosave.js';
 import { csvToTasks, tasksToCSV } from './csv.js';
+import { decodeShare, encodeShare, shareDataFromHash, shareUrl } from './share.js';
 import { showToast } from './toast.js';
 import { addDays, escapeHTML, fileStem, formatDate, joinDeps, parseDeps, parseISODate, plural, toISODate } from './utils.js';
 import { TASK_COLORS, colorFor, isColorKey } from './colors.js';
@@ -58,6 +59,8 @@ let tasks = currentProject().tasks;
 let selectedId = null;
 let projectName = '';
 let zoomIndex = DEFAULT_ZOOM;
+// 공유 링크로 연 읽기 전용 화면: 남의 일정을 보여 줄 뿐 저장·이력에 남기지 않는다 (내 프로젝트는 그대로)
+let readOnly = false;
 
 // 실행 취소 이력은 메모리에만 둔다 (새로고침하면 사라짐)
 const history = createHistory(100);
@@ -75,7 +78,7 @@ let redrawAfterGesture = false;
 // 바뀌기 전 상태를 이력에 남긴다. 한 동작에서 이어지는 변경은 하나로 묶는다
 // (막대를 끄는 동안의 연속 변경과 의존 태스크 이동, 태스크와 이름을 함께 바꾸는 불러오기)
 function record(label) {
-  if (recordingBatch) return;
+  if (readOnly || recordingBatch) return;
   if (pointerDownOnChart) {
     if (gestureRecorded) return;
     gestureRecorded = true;
@@ -97,18 +100,21 @@ function snapshot() {
 
 // 브라우저 저장 공간에 쓰고, 파일 자동 저장이 켜져 있으면 잠시 뒤 파일에도 쓴다
 function saveState() {
+  if (readOnly) return;
   saveProjectsState({ projects, currentId });
   autosave.schedule();
 }
 
 function persist() {
+  if (readOnly) return;
   projects = snapshot().projects;
   saveState();
 }
 
 // 파일 자동 저장. 내용은 모든 프로젝트(지금 고치는 중인 것 포함)
 const autosave = createAutosave({
-  getData: () => buildAllBackup(snapshot()),
+  // 읽기 전용(공유 링크) 화면에서는 tasks가 남의 일정이라 저장된 내 프로젝트 목록 그대로 쓴다
+  getData: () => buildAllBackup(readOnly ? { projects } : snapshot()),
   onChange: (state) => {
     if (state.lastSaved) saveLastBackup(state.lastSaved);
     renderBackupStatus();
@@ -628,7 +634,7 @@ function openAdd() {
 
 function openEdit(id) {
   const task = tasks.find((t) => t.id === id);
-  if (!task) return;
+  if (!task || readOnly) return;
   gantt.hide_popup();
   selectTask(id);
   openTaskModal({
@@ -793,6 +799,80 @@ async function saveBaseline() {
 
 document.getElementById('baseline-set-btn').addEventListener('click', saveBaseline);
 
+// 공유 링크: 지금 프로젝트를 압축해 주소 # 뒤에 넣는다. 링크를 연 사람은 읽기 전용으로 보고, 원하면 자기 프로젝트로 저장한다
+const LONG_LINK = 8000;
+document.getElementById('share-link-btn').addEventListener('click', async () => {
+  if (!tasks.length) {
+    showToast('Add a task before sharing.');
+    return;
+  }
+  try {
+    const url = shareUrl(location.href, await encodeShare({ name: projectName, tasks }));
+    await navigator.clipboard.writeText(url);
+    const long = url.length > LONG_LINK ? ` It’s long (${url.length.toLocaleString()} characters), so some chat apps may cut it — send a JSON file if it doesn’t open.` : '';
+    showToast(`Copied a view-only link. Anyone with it can see these tasks and notes; later changes won’t update it.${long}`);
+  } catch (err) {
+    showToast(`Couldn’t copy the link. ${err.message}`, { type: 'error' });
+  }
+});
+
+const shareBanner = document.getElementById('share-banner');
+
+// 공유 링크로 열었을 때: 링크의 일정만 보여 주고 고치기·저장을 막는다
+async function openSharedView(data) {
+  let shared;
+  try {
+    const { name, tasks: raw } = await decodeShare(data);
+    shared = { name, tasks: normalizeTasks(parseTaskList(raw).tasks) };
+  } catch (err) {
+    clearShareHash();
+    showToast(`Couldn’t open the shared link. ${err.message}`, { type: 'error' });
+    return;
+  }
+  readOnly = true;
+  document.body.classList.add('is-readonly');
+  projectNameInput.readOnly = true;
+  gantt.options.readonly = true;
+  shareBanner.hidden = false;
+  document.getElementById('share-banner-text').textContent =
+    `You’re viewing a shared copy of “${shared.name}”. It’s read-only and not saved in this browser.`;
+  tasks = shared.tasks;
+  selectedId = null;
+  setProjectName(shared.name, { save: false });
+  renderList();
+  redrawChart({ keepScroll: false });
+  decorateChart();
+}
+
+// window.history를 쓴다 (이 파일의 history는 실행 취소 이력)
+const clearShareHash = () => window.history.replaceState(null, '', location.pathname + location.search);
+
+// 내 프로젝트로 저장: 보던 일정을 새 프로젝트로 추가하고 평소 화면으로
+document.getElementById('share-save-btn').addEventListener('click', () => {
+  const copy = createProject(projectName, tasks);
+  readOnly = false;
+  // 이력에는 내 프로젝트 상태를 남겨야 하므로(⌘Z로 저장을 되돌릴 수 있게) 작업 사본을 먼저 내 프로젝트로 돌린다
+  tasks = currentProject().tasks;
+  projectName = currentProject().name;
+  record(`Save shared “${copy.name}”`);
+  document.body.classList.remove('is-readonly');
+  projectNameInput.readOnly = false;
+  gantt.options.readonly = false;
+  shareBanner.hidden = true;
+  clearShareHash();
+  setProjects([...projects, copy], copy.id);
+  showToast(`Saved “${copy.name}” to your projects.`);
+});
+// 닫기: 내 프로젝트 화면으로 다시 연다 (보던 공유 일정은 남지 않는다)
+document.getElementById('share-close-btn').addEventListener('click', () => {
+  clearShareHash();
+  location.reload();
+});
+// 이미 열린 앱 주소창에 공유 링크를 붙여 넣으면 #만 바뀌어 새로 열리지 않으므로 직접 다시 연다
+window.addEventListener('hashchange', () => {
+  if (shareDataFromHash(location.hash)) location.reload();
+});
+
 // 백업: 모든 프로젝트 내보내기, 파일 자동 저장
 document.getElementById('export-all-btn').addEventListener('click', exportAllBackup);
 
@@ -880,6 +960,7 @@ document.getElementById('redo-btn').addEventListener('click', redo);
 // ⌘Z/⇧⌘Z (윈도우 Ctrl+Z/Ctrl+Y). 입력칸에서는 글자 되돌리기가 되도록, 모달이 열려 있으면 건드리지 않는다
 document.addEventListener('keydown', (e) => {
   if (e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+  if (readOnly) return;
   if (document.querySelector('dialog[open]')) return;
   if (!(isMac ? e.metaKey : e.ctrlKey) || e.altKey) return;
   const key = e.key.toLowerCase();
@@ -947,6 +1028,7 @@ rowsEl.addEventListener('keydown', (e) => {
   } else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
     // Alt+↑/↓: 같은 단계의 이웃과 자리를 바꾸고(그룹은 자식과 함께), 다시 그려진 같은 행에 포커스를 돌려준다
     e.preventDefault();
+    if (readOnly) return;
     if (isFiltering()) {
       showToast('Clear the search and filters to reorder tasks.');
       return;
@@ -1184,3 +1266,6 @@ autosave.init();
 navigator.storage?.persist?.().catch(() => {});
 renderList();
 updateZoomControls();
+
+const sharedData = shareDataFromHash(location.hash);
+if (sharedData) openSharedView(sharedData);

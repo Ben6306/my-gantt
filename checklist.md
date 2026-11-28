@@ -202,9 +202,11 @@
 - [x] ego-browser 확인: 내려받은 파일 BOM·열 이름, 같은 파일을 불러오면 새 프로젝트로 그룹 구조까지 복원
 
 ### 24단계 — 읽기 전용 공유 링크 (추천 8)
-- [ ] `src/share.js`: 프로젝트 → 압축 → URL #share=, 되돌리기 + 테스트
-- [ ] More 메뉴 "Copy view-only link"
-- [ ] 링크로 열면 읽기 전용 화면(편집 막음, 저장 안 함), "Save to my projects" / "Close"
+- [x] `src/share.js`: 프로젝트 → 압축 → URL #share=, 되돌리기 + 테스트
+- [x] More 메뉴 "Copy view-only link"
+- [x] 링크로 열면 읽기 전용 화면(편집 막음, 저장 안 함), "Save to my projects" / "Close"
+- [x] ego-browser 확인: 링크(436자)로 열기 → 배너·편집 단추 숨김·막대 손잡이 없음·더블클릭 모달 안 열림·저장 공간 그대로, Save → 새 프로젝트·⌘Z로 되돌림, 깨진 링크 → 안내 토스트
+- [x] 버그: 실행 취소 이력 변수 `history`가 `window.history`를 가려 Save가 멈춤 → `window.history`로
 
 ### 마무리
 - [ ] README 기능·데이터 형식·백업 형식 갱신

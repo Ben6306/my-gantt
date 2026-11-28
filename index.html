@@ -75,6 +75,8 @@
             <p class="project-menu-label">Baseline</p>
             <button type="button" id="baseline-set-btn" class="menu-action">Save current dates as baseline</button>
             <button type="button" id="baseline-clear-btn" class="menu-action">Clear baseline</button>
+            <p class="project-menu-label">Share</p>
+            <button type="button" id="share-link-btn" class="menu-action">Copy view-only link</button>
             <p class="project-menu-label">Spreadsheet</p>
             <button type="button" id="csv-export-btn" class="menu-action">Export CSV (Excel, Google Sheets)</button>
             <button type="button" id="csv-import-btn" class="menu-action">Import CSV as a new project…</button>
@@ -87,6 +89,14 @@
           <button type="button" id="new-project-btn" class="btn-ghost" title="Start a new empty project (your other projects stay)">New project</button>
         </div>
       </header>
+
+      <div id="share-banner" class="share-banner" hidden>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /><circle cx="12" cy="12" r="3" /></svg>
+        <span id="share-banner-text"></span>
+        <span class="spacer"></span>
+        <button type="button" id="share-save-btn" class="btn-primary btn-sm-primary">Save to my projects</button>
+        <button type="button" id="share-close-btn" class="btn-ghost btn-sm">Close</button>
+      </div>
 
       <main class="board">
         <div class="panel-toolbar list-toolbar">
