@@ -9,10 +9,11 @@ import { createProject, initState, removeProject } from './projects.js';
 import { renderTaskList } from './taskList.js';
 import { openTaskModal } from './taskModal.js';
 import { confirmDialog } from './confirmDialog.js';
-import { allBackupFileName, backupFileName, buildAllBackup, buildBackup, parseAnyBackup } from './backup.js';
+import { allBackupFileName, backupFileName, buildAllBackup, buildBackup, parseAnyBackup, parseTaskList } from './backup.js';
 import { autosaveSupported, createAutosave } from './autosave.js';
+import { csvToTasks, tasksToCSV } from './csv.js';
 import { showToast } from './toast.js';
-import { addDays, escapeHTML, formatDate, joinDeps, parseDeps, parseISODate, plural, toISODate } from './utils.js';
+import { addDays, escapeHTML, fileStem, formatDate, joinDeps, parseDeps, parseISODate, plural, toISODate } from './utils.js';
 import { TASK_COLORS, colorFor, isColorKey } from './colors.js';
 import { DEFAULT_ZOOM, MODE_DEFAULT_ZOOM, ZOOM_LEVELS, fitZoom, spanDays } from './zoom.js';
 import { exportPng } from './exportPng.js';
@@ -794,6 +795,26 @@ document.getElementById('baseline-set-btn').addEventListener('click', saveBaseli
 
 // 백업: 모든 프로젝트 내보내기, 파일 자동 저장
 document.getElementById('export-all-btn').addEventListener('click', exportAllBackup);
+
+// CSV: 지금 프로젝트의 모든 태스크. 엑셀이 UTF-8로 읽도록(한글 깨짐 방지) 앞에 BOM을 붙인다
+document.getElementById('csv-export-btn').addEventListener('click', () => {
+  const fileName = `${fileStem(projectName)}-${toISODate(new Date())}.csv`;
+  download(`\uFEFF${tasksToCSV(tasks)}`, fileName, 'text/csv;charset=utf-8');
+  showToast(`Exported ${plural(tasks.length, 'task')} to ${fileName}.`);
+});
+const csvInput = document.getElementById('csv-file');
+document.getElementById('csv-import-btn').addEventListener('click', () => csvInput.click());
+csvInput.addEventListener('change', async () => {
+  const [file] = csvInput.files;
+  csvInput.value = '';
+  if (!file) return;
+  try {
+    const { tasks: imported, droppedDeps } = parseTaskList(csvToTasks(await file.text()));
+    addImportedProjects([{ name: file.name.replace(/\.csv$/i, ''), tasks: imported }], droppedDeps);
+  } catch (err) {
+    showToast(`Couldn’t import the CSV. ${err.message}`, { type: 'error' });
+  }
+});
 document.getElementById('autosave-btn').addEventListener('click', async () => {
   try {
     if (await autosave.choose('my-gantt-autosave.json')) {
